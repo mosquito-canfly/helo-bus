@@ -1,121 +1,11 @@
-"""In-memory booking store. Swap for a real database when you deploy for real."""
+"""In-memory demo state: the tool-call event log and arrival alerts."""
 
 from __future__ import annotations
 
 import json
-import random
-import string
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
-SERVICES = {
-    "cleaning": {"label": "Dental Cleaning", "minutes": 30},
-    "checkup": {"label": "Routine Checkup", "minutes": 30},
-    "whitening": {"label": "Teeth Whitening", "minutes": 60},
-    "root-canal": {"label": "Root Canal", "minutes": 90},
-}
-
-OPEN_HOUR = 9
-CLOSE_HOUR = 17
-SLOT_MINUTES = 30
-HORIZON_DAYS = 14
-
-_appointments: dict[str, dict] = {}
-_taken: set[tuple[str, str]] = set()
-
-
-def _slots_for_day(day: date) -> list[str]:
-    start = datetime.combine(day, datetime.min.time()).replace(hour=OPEN_HOUR)
-    end = datetime.combine(day, datetime.min.time()).replace(hour=CLOSE_HOUR)
-    slots: list[str] = []
-    cursor = start
-    while cursor < end:
-        slots.append(cursor.strftime("%H:%M"))
-        cursor += timedelta(minutes=SLOT_MINUTES)
-    return slots
-
-
-def _seed_existing_bookings() -> None:
-    """Pre-book a deterministic scatter of slots so availability looks real."""
-    rng = random.Random(20260901)
-    for day_offset in range(HORIZON_DAYS):
-        day = date.today() + timedelta(days=day_offset)
-        if day.weekday() >= 5:
-            continue
-        for slot in _slots_for_day(day):
-            if rng.random() < 0.45:
-                _taken.add((day.isoformat(), slot))
-
-
-def _confirmation_code() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    while True:
-        code = "".join(random.choices(alphabet, k=6))
-        if code not in _appointments:
-            return code
-
-
-def is_open(day: date) -> bool:
-    return day.weekday() < 5
-
-
-def available_slots(day: date, limit: int = 4) -> list[str]:
-    if not is_open(day):
-        return []
-    free = [s for s in _slots_for_day(day) if (day.isoformat(), s) not in _taken]
-    return free[:limit]
-
-
-def next_open_days(after: date, count: int = 2) -> list[date]:
-    found: list[date] = []
-    cursor = after
-    while len(found) < count:
-        cursor += timedelta(days=1)
-        if (cursor - date.today()).days > HORIZON_DAYS:
-            break
-        if is_open(cursor) and available_slots(cursor):
-            found.append(cursor)
-    return found
-
-
-def book(service: str, day: date, time_str: str, name: str, phone: str) -> dict:
-    key = (day.isoformat(), time_str)
-    if key in _taken:
-        raise SlotUnavailable(f"{time_str} on {day.isoformat()} is already booked")
-    _taken.add(key)
-    code = _confirmation_code()
-    record = {
-        "confirmation_code": code,
-        "service": service,
-        "service_label": SERVICES[service]["label"],
-        "date": day.isoformat(),
-        "time": time_str,
-        "customer_name": name,
-        "phone": phone,
-        "confirmation_sent": False,
-    }
-    _appointments[code] = record
-    return record
-
-
-def get(code: str) -> dict | None:
-    return _appointments.get(code)
-
-
-def mark_confirmation_sent(code: str) -> dict | None:
-    record = _appointments.get(code)
-    if record:
-        record["confirmation_sent"] = True
-    return record
-
-
-class SlotUnavailable(Exception):
-    pass
-
-
-_seed_existing_bookings()
-
-
-# --- demo event log -------------------------------------------------------
+# --- tool-call event log ---------------------------------------------------
 # HTTP tools run on AssemblyAI's servers, so the browser never sees a
 # tool.call event. Recording each hit here is what lets the demo page show
 # them arriving.
@@ -140,5 +30,62 @@ def log_event(path: str, request_body: bytes, response_body: bytes) -> None:
     })
 
 
+def log_alert_event(message: str) -> None:
+    _events.append({
+        "seq": len(_events) + 1,
+        "tool": "arrival_alert",
+        "alert": True,
+        "arguments": {},
+        "result": {"ok": True, "message": message},
+        "at": datetime.now().strftime("%H:%M:%S"),
+    })
+
+
 def events_since(cursor: int) -> list[dict]:
     return [e for e in _events if e["seq"] > cursor]
+
+
+# --- arrival alerts ----------------------------------------------------
+# Registered by the set_arrival_alert tool, checked opportunistically every
+# time gtfs.ensure_fresh() runs (tool calls and /api/events polling both
+# trigger it). Fire once, then removed.
+
+_alerts: list[dict] = []
+_next_alert_id = 1
+
+
+def add_alert(stop_name: str, stop_ids: list[str], route_id: str, route_short_name: str, threshold_minutes: int) -> int:
+    global _next_alert_id
+    alert_id = _next_alert_id
+    _next_alert_id += 1
+    _alerts.append({
+        "id": alert_id,
+        "stop_name": stop_name,
+        "stop_ids": stop_ids,
+        "route_id": route_id,
+        "route_short_name": route_short_name,
+        "threshold_minutes": threshold_minutes,
+    })
+    return alert_id
+
+
+def check_alerts(get_arrivals) -> None:
+    """get_arrivals(stop_ids, route_id) -> list of {eta_seconds, ...}."""
+    if not _alerts:
+        return
+    fired = []
+    for alert in _alerts:
+        arrivals = get_arrivals(alert["stop_ids"], alert["route_id"])
+        if not arrivals:
+            continue
+        soonest = min(a["eta_seconds"] for a in arrivals)
+        if soonest <= alert["threshold_minutes"] * 60:
+            minutes = soonest // 60
+            message = (
+                f"Route {alert['route_short_name']} is about {minutes} minute{'s' if minutes != 1 else ''} "
+                f"from {alert['stop_name']}."
+            )
+            log_alert_event(message)
+            fired.append(alert)
+    for alert in fired:
+        _alerts.remove(alert)

@@ -10,6 +10,8 @@ const els = {
   count: document.getElementById("call-count"),
   agentId: document.getElementById("agent-id"),
   timer: document.getElementById("timer"),
+  alertBanner: document.getElementById("alert-banner"),
+  alertText: document.getElementById("alert-text"),
 };
 
 let ws = null;
@@ -22,7 +24,7 @@ let live = false;
 let playHead = 0;
 let scheduled = [];
 
-// Tool calls arrive out-of-band from the booking API's own log. Buffer them so
+// Tool calls arrive out-of-band from the bus arrival API's own log. Buffer them so
 // the next agent reply can show which ones fed it.
 let eventCursor = 0;
 let pollTimer = null;
@@ -202,10 +204,37 @@ async function pollEvents() {
     for (const event of data.events) {
       renderCall(event);
       pending.push(event);
+      if (event.alert) showAlert(event.result.message);
     }
   } catch (_) {
     /* transient; the next tick retries */
   }
+}
+
+// ---------------------------------------------------------- arrival alerts
+
+let alertTimer = null;
+
+function beep() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = 880;
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.4);
+}
+
+function showAlert(message) {
+  els.alertText.textContent = message;
+  els.alertBanner.hidden = false;
+  beep();
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => (els.alertBanner.hidden = true), 8000);
 }
 
 // ---------------------------------------------------------------- audio
@@ -462,28 +491,15 @@ function renderInfo(data) {
 
   const live = block(
     "What it can see",
-    "your booking API",
-    "None of this is in the JSON. The agent has no calendar of its own — it finds all of this out by calling your API while you talk to it."
+    "your bus arrival API",
+    "None of this is in the JSON. The agent has no map of its own — it finds all of this out by calling your API, which pulls RapidKL's live GTFS feed while you talk to it."
   );
   live.append(kv([
-    ["Open", `${data.hours.days}, ${data.hours.open} to ${data.hours.close}`],
-    ["Slots", `${data.hours.slot_minutes} minutes long`],
+    ["Stops", data.network.stops],
+    ["Routes", data.network.routes],
+    ["Buses now", data.network.active_vehicles],
+    ["Service hours", data.network.service_hours],
   ]));
-  live.append(el("p", "block-note", "Services you can ask for:"));
-  live.append(pills(data.services.map((s) => s.key)));
-  live.append(el("p", "block-note", "Next open days, and what is genuinely free right now:"));
-  for (const day of data.days) {
-    const card = el("div", "day");
-    const head = el("div", "day-head");
-    head.append(
-      el("span", "day-name", day.label),
-      el("span", "day-count", `${day.total} free`)
-    );
-    const slots = el("div", "slots");
-    for (const slot of day.slots) slots.append(el("span", "slot", slot));
-    card.append(head, slots);
-    live.append(card);
-  }
 
   infoEls.body.append(config, live);
 }
@@ -501,7 +517,7 @@ async function openInfo() {
   try {
     renderInfo(await fetch("/api/demo-info").then((r) => r.json()));
   } catch (_) {
-    infoEls.body.textContent = "Could not load demo data. Is the booking API running?";
+    infoEls.body.textContent = "Could not load demo data. Is the bus arrival API running?";
   }
 }
 

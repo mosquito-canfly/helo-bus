@@ -2,7 +2,7 @@
 
 Run once to create, then re-run with --update <agent_id> after every edit to
 agent.json. The agent lives on AssemblyAI's servers; nothing of yours stays
-connected during a call except the booking API.
+connected during a call except the bus arrival API.
 """
 
 from __future__ import annotations
@@ -37,11 +37,11 @@ def check_reachable(base_url: str) -> None:
             "Try: cloudflared tunnel --url http://localhost:8000"
         )
     try:
-        resp = httpx.post(f"{base_url.rstrip('/')}/tools/get_today", timeout=10)
+        resp = httpx.post(f"{base_url.rstrip('/')}/tools/get_now", timeout=10)
         resp.raise_for_status()
     except Exception as exc:
-        sys.exit(f"Could not reach {base_url}/tools/get_today — is the API running?\n{exc}")
-    print(f"  booking API reachable: {resp.json()['message']}")
+        sys.exit(f"Could not reach {base_url}/tools/get_now — is the API running?\n{exc}")
+    print(f"  bus API reachable: {resp.json()['message']}")
 
 
 def main() -> None:

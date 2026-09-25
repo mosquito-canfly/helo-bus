@@ -1,102 +1,89 @@
 {
-  "name": "Brightsmile Dental Scheduler",
-  "greeting": "Thanks for calling Brightsmile Dental. Are you looking to book an appointment?",
+  "name": "Helo Bus",
+  "greeting": "Helo! I'm Helo Bus. Which stop are you at, and where are you headed?",
   "voice": { "voice_id": "alba" },
-  "system_prompt": "You are the scheduling assistant for Brightsmile Dental. Keep every reply under two sentences and speak naturally, like a receptionist on the phone.\n\nYou have no sense of today's date. Call get_today before reasoning about any day the caller mentions ('tomorrow', 'next Tuesday') and convert it to a YYYY-MM-DD date yourself. The clinic is open Monday to Friday only.\n\nBooking sequence:\n1. Find out which service they want. Offered: cleaning, checkup, whitening, root-canal. Nothing else.\n2. Call check_availability and read back the open times.\n3. Once they pick a time, collect their full name, then their phone number. Ask for them one at a time.\n4. Call book_appointment only when you have all five: service, date, time, full name, and a phone number that includes a country code. Never call it with a field still missing or guessed.\n5. Call send_confirmation with the confirmation code, then read the code aloud one character at a time.\n\nPhone numbers: you need the international form starting with a plus and the country code. If the caller gives a national number (it starts with a zero, or they just say the local digits), ask which country they are calling from and convert it yourself before booking. A Nigerian 0916 383 6950 is +2349163836950; a UK 07700 900123 is +447700900123. Read the full international number back and get a yes before you book.\n\nEvery tool returns a 'message' field. Base what you say on that field. If a tool returns ok=false, tell the caller what the message says and act on it: 'needs_country_code' means ask which country they are in, 'closed' or 'day_full' means offer the day the message suggests. Never say the booking system is broken. Never invent an opening, a confirmation code, or a price.",
+  "system_prompt": "You are Helo Bus, a voice assistant that tells RapidKL bus riders in Kuala Lumpur when their bus is arriving. Keep every reply under two sentences and speak naturally, like a friend checking the bus app for someone.\n\nYou have no sense of the current time. Call get_now before reasoning about whether buses are running now.\n\nTypical flow:\n1. Find out which stop the caller is at. Call find_stop with whatever they said. If it returns more than one candidate, read the short list back and ask which one.\n2. Call next_arrivals with the resolved stop name. Pass a route only if the caller named one (e.g. 'T789' or '300') — otherwise leave it out and you'll get all routes serving that stop.\n3. If the caller wants to be notified rather than told now, call set_arrival_alert with the stop, the route they named, and how many minutes' notice they want. A route is required for an alert, so ask which route if they haven't said.\n\nEvery tool returns a 'message' field — base what you say on it. If a tool returns ok=false, act on the reason: 'ambiguous_stop' or the find_stop candidates list means read the options back and ask which one; 'direction_ambiguous' means ask which direction; 'unknown_route' means ask the caller to repeat the route number or letter; 'no_service_night' means tell them RapidKL isn't running right now and when it starts again; 'feed_unavailable' means live positions are temporarily down, suggest trying again shortly — never say the buses have stopped running; 'no_buses_nearby' means nothing is close enough right now, distinct from the service being down. Never invent an ETA, a stop name, or a route you weren't given by a tool.",
   "keyterms": [
-    "Brightsmile",
-    "cleaning",
-    "checkup",
-    "whitening",
-    "root canal",
-    "hygienist",
-    "reschedule",
-    "confirmation code"
+    "RapidKL",
+    "KL Sentral",
+    "Pasar Seni",
+    "Mid Valley",
+    "next bus",
+    "arrival",
+    "platform"
   ],
   "tools": [
     {
-      "name": "get_today",
-      "description": "Get today's date and the next open clinic days. Call this before interpreting any relative day the caller mentions.",
+      "name": "get_now",
+      "description": "Get the current date, time and weekday in Kuala Lumpur. Call this before reasoning about whether buses are running now.",
       "parameters": { "type": "object", "properties": {}, "required": [] },
-      "http": { "url": "{{BASE_URL}}/tools/get_today", "http_method": "POST" },
+      "http": { "url": "{{BASE_URL}}/tools/get_now", "http_method": "POST" },
       "timeout_seconds": 10
     },
     {
-      "name": "check_availability",
-      "description": "List open appointment times for a service on a specific date. The clinic is closed at weekends.",
+      "name": "find_stop",
+      "description": "Look up a RapidKL bus stop by name or landmark, as the caller said it. Returns the matching stop, or a short list to disambiguate if more than one stop shares that name.",
       "parameters": {
         "type": "object",
         "properties": {
-          "service": {
+          "query": {
             "type": "string",
-            "description": "The service the caller wants.",
-            "enum": ["cleaning", "checkup", "whitening", "root-canal"]
-          },
-          "date": {
-            "type": "string",
-            "description": "The day to check, as YYYY-MM-DD.",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-            "examples": ["2026-09-08", "2026-09-15"]
+            "description": "The stop name or landmark the caller mentioned.",
+            "examples": ["KL Sentral", "Pasar Seni", "Mid Valley"]
           }
         },
-        "required": ["service", "date"]
+        "required": ["query"]
       },
-      "http": { "url": "{{BASE_URL}}/tools/check_availability", "http_method": "POST" },
+      "http": { "url": "{{BASE_URL}}/tools/find_stop", "http_method": "POST" },
       "timeout_seconds": 10
     },
     {
-      "name": "book_appointment",
-      "description": "Book a confirmed appointment slot. Only call this once the caller has agreed to a specific time AND you have their full name and a phone number with a country code.",
+      "name": "next_arrivals",
+      "description": "Get live bus arrival times for a stop. Omit route to see every route serving that stop.",
       "parameters": {
         "type": "object",
         "properties": {
-          "service": {
+          "stop": {
             "type": "string",
-            "enum": ["cleaning", "checkup", "whitening", "root-canal"]
+            "description": "Stop name, exactly as returned by find_stop."
           },
-          "date": {
+          "route": {
             "type": "string",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-            "examples": ["2026-09-08"]
-          },
-          "time": {
-            "type": "string",
-            "description": "Slot start in 24-hour HH:MM form.",
-            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
-            "examples": ["09:30", "14:00"]
-          },
-          "customer_name": {
-            "type": "string",
-            "description": "The caller's full name as they said it."
-          },
-          "phone": {
-            "type": "string",
-            "description": "Callback number in international form, starting with + and the country code. Convert national numbers before sending: Nigerian 0916 383 6950 becomes +2349163836950.",
-            "pattern": "^[+0-9][-0-9 ()]{6,20}$",
-            "examples": ["+2349163836950", "+14155552671", "+447700900123"]
+            "description": "Route short name, if the caller named one.",
+            "examples": ["T789", "300"]
           }
         },
-        "required": ["service", "date", "time", "customer_name", "phone"]
+        "required": ["stop"]
       },
-      "http": { "url": "{{BASE_URL}}/tools/book_appointment", "http_method": "POST" },
+      "http": { "url": "{{BASE_URL}}/tools/next_arrivals", "http_method": "POST" },
       "timeout_seconds": 15
     },
     {
-      "name": "send_confirmation",
-      "description": "Text the caller their appointment confirmation. Call immediately after a successful booking.",
+      "name": "set_arrival_alert",
+      "description": "Register a one-time alert for when a specific bus route is about to arrive at a stop. Requires both a stop and a route.",
       "parameters": {
         "type": "object",
         "properties": {
-          "confirmation_code": {
+          "stop": {
             "type": "string",
-            "description": "The code returned by book_appointment.",
-            "pattern": "^[A-Z0-9]{6}$",
-            "examples": ["KGLDA4"]
+            "description": "Stop name, exactly as returned by find_stop."
+          },
+          "route": {
+            "type": "string",
+            "description": "Route short name the caller is waiting for.",
+            "examples": ["T789", "300"]
+          },
+          "threshold_minutes": {
+            "type": "integer",
+            "description": "Notify when the bus is about this many minutes away.",
+            "minimum": 1,
+            "maximum": 35,
+            "examples": [5, 10]
           }
         },
-        "required": ["confirmation_code"]
+        "required": ["stop", "route", "threshold_minutes"]
       },
-      "http": { "url": "{{BASE_URL}}/tools/send_confirmation", "http_method": "POST" },
+      "http": { "url": "{{BASE_URL}}/tools/set_arrival_alert", "http_method": "POST" },
       "timeout_seconds": 10
     }
   ]

@@ -1,5 +1,7 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-python-dotenv==1.0.1
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+python-dotenv==1.2.3
 httpx==0.28.1
+gtfs-realtime-bindings==3.0.0
+tzdata==2026.4
