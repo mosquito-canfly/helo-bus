@@ -29,10 +29,15 @@
         --color-text-primary: #111827;
         --color-text-secondary: #6b7280;
         --color-text-muted: #9ca3af;
-        --color-route-rapidkl: #880808;
-        --color-route-feeder: #5e6673;
-        --color-route-rapidkl-tint: #8808080f;
-        --color-route-feeder-tint: #5e66730f;
+        /* Red is reserved for the live-call status badge only — see
+           DESIGN.md's Do's and Don'ts. Route badges keep a two-tone
+           distinction (RapidKL vs MRT Feeder) using black vs grey instead. */
+        --color-ink: #000000;
+        --color-live: #880808;
+        --color-route-rapidkl: var(--color-ink);
+        --color-route-feeder: var(--color-text-secondary);
+        --color-route-rapidkl-tint: var(--color-surface-hover);
+        --color-route-feeder-tint: var(--color-surface);
         --color-danger-bg: #fef2f2;
         --color-danger-border: #fee2e2;
         --color-danger-text: #dc2626;
@@ -172,9 +177,9 @@
         text-overflow: ellipsis;
       }
 
-      /* status pill — the "live" state is the one place the RapidKL maroon
-         gets to be loud outside an actual alert, echoing where-bus's rule
-         that category colour is the system's only strong colour. */
+      /* status pill — "live" is the ONLY place red appears anywhere in this
+         UI (DESIGN.md's Do's and Don'ts). Everything else — header icon,
+         call button, route badges, the alert banner — is black/white/grey. */
       #status {
         flex: none;
         display: inline-flex;
@@ -204,8 +209,8 @@
       }
       #status[data-state="live"] {
         color: #ffffff;
-        background: var(--color-route-rapidkl);
-        border-color: var(--color-route-rapidkl);
+        background: var(--color-live);
+        border-color: var(--color-live);
       }
       #status[data-state="live"]::before {
         opacity: 1;
@@ -603,23 +608,23 @@
         transition: color 0.2s;
       }
       #timer[data-state="running"] {
-        color: var(--color-route-rapidkl);
+        color: var(--color-ink);
       }
       /* Held after the call ends, so the length of the last one stays readable. */
       #timer[data-state="ended"] {
         color: var(--color-text-secondary);
       }
 
-      /* Primary CTA — the one place the system's brand colour gets to fill
-         a large surface, matching where-bus's single strong-colour rule. */
+      /* Primary CTA — solid black, the one strong fill in the whole system
+         outside the live status badge. No red here (DESIGN.md Do's/Don'ts). */
       #talk {
         font-family: var(--font-sans);
         font-size: var(--type-title-md-size);
         font-weight: 700;
         padding: var(--space-md) var(--space-xl);
         border-radius: var(--radius-pill);
-        border: 1.5px solid var(--color-route-rapidkl);
-        background: var(--color-route-rapidkl);
+        border: 1.5px solid var(--color-ink);
+        background: var(--color-ink);
         color: #ffffff;
         cursor: pointer;
         box-shadow: var(--shadow-md);
@@ -631,8 +636,8 @@
           opacity 0.15s;
       }
       #talk:hover:not(:disabled) {
-        background: #6b0606;
-        border-color: #6b0606;
+        background: #2b2b2b;
+        border-color: #2b2b2b;
       }
       #talk:active:not(:disabled) {
         transform: scale(0.98);
@@ -642,18 +647,18 @@
         cursor: not-allowed;
       }
       #talk:focus-visible {
-        outline: 2px solid var(--color-route-rapidkl);
+        outline: 2px solid var(--color-ink);
         outline-offset: 3px;
       }
-      /* "End call" flips to a quiet outline pill instead of the solid maroon */
+      /* "End call" flips to a quiet grey outline pill — still no red */
       #talk.ending {
         background: var(--color-bg);
         border-color: var(--color-border);
-        color: var(--color-danger-text);
+        color: var(--color-text-primary);
       }
       #talk.ending:hover:not(:disabled) {
-        background: var(--color-danger-bg);
-        border-color: var(--color-danger-border);
+        background: var(--color-surface-hover);
+        border-color: var(--color-text-secondary);
       }
 
       .meta {
@@ -677,8 +682,8 @@
       }
 
       /* ------------------------------------------------------- alert banner */
-      /* The one moment RapidKL maroon fills an entire surface outside the
-         call button — an arrival alert is, after all, about the bus. */
+      /* Solid black fill, same polarity-flip-for-attention move as the call
+         button — loud through contrast and bold type, not colour. */
 
       .alert-banner {
         flex: none;
@@ -686,7 +691,7 @@
         align-items: center;
         gap: var(--space-md);
         padding: var(--space-lg) var(--space-2xl);
-        background: var(--color-route-rapidkl);
+        background: var(--color-ink);
         box-shadow: var(--shadow-md);
         animation: alert-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
       }

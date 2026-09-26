@@ -346,14 +346,15 @@ Icon-pill buttons (dark-mode toggle, cancel, close) run ~40–44px including pad
 ## Do's and Don'ts
 
 ### Do
-- Colour every route/stop icon by category — RapidKL maroon (or dark-mode sage), MRT Feeder slate (or dark-mode near-white) — and nowhere else in the palette.
+- **In this build, red is reserved for the live-call status badge — full stop.** Every other surface (header icon, call button, route badges, the alert banner) is black/white/grey. Where-bus's own reference system colours route/stop icons by category (RapidKL maroon, MRT Feeder slate); this build keeps the *category distinction* — black for RapidKL, grey for MRT Feeder — but drops the colour itself, so red stays legible as the one "something is live" signal instead of competing with a decorative brand colour.
 - Use `{rounded.pill}` for every control and badge, `{rounded.xl}` for every data card, `{rounded.2xl}` only for a *container* of cards (the overlay panel, the sheet's outer corners).
 - Right-align the ETA number in `{typography.eta-number}`, bold, primary text colour, as the loudest element in its row.
 - Give interactive cards a hover lift (`{shadow.xl}` + `scale-[1.01]`) and a press-down (`scale-[0.99]`) — the tactile response *is* the depth cue, not a heavier shadow.
 - Keep the sheet/sidebar as one component with two anchor states, not two separately-designed panels that happen to show the same data.
 
 ### Don't
-- Don't introduce a third "status" colour — route category and genuine error (`{colors.danger-*}`) are the only two colour roles that exist; a warning state reuses neutral gray + copy, not a new hue.
+- **Don't use red anywhere except the live-call status badge.** Not the header icon, not the call button, not a route badge, not the alert banner — those are black/white/grey only. Genuine errors (`{colors.danger-*}`) are the one other colour role that survives, since that's an accessibility signal, not decoration.
+- Don't introduce a third "status" colour beyond live-red and error-red — a warning state reuses neutral gray + copy, not a new hue.
 - Don't put a route's category colour on a chip's *background* — the chip is always neutral; only the icon glyph or badge text carries the colour.
 - Don't reach for `{rounded.md}`/`{rounded.lg}` (8–12px) as a primary card shape — those sizes aren't part of this system's working vocabulary even though the token exists; every real card is `{rounded.xl}` or bigger.
 - Don't give the desktop sidebar rounded corners or a top/bottom shadow — square, full-height, side-shadow only, deliberately flush against the map.

@@ -38,6 +38,7 @@ from . import store
 
 ROOT = Path(__file__).resolve().parent.parent
 ALIASES_FILE = ROOT / "data" / "aliases.json"
+STATIC_FILE = ROOT / "data" / "static.json"
 CATEGORIES = ["rapid-bus-kl", "rapid-bus-mrtfeeder"]
 STATIC_URL_TMPL = "https://api.data.gov.my/gtfs-static/prasarana?category={category}"
 RT_URL_TMPL = "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category={category}"
@@ -178,6 +179,13 @@ def _soundex(word: str) -> str:
 
 
 # --------------------------------------------------------------- static load
+#
+# Everything from here to _build_route_paths_and_distances is build-time
+# only: raw GTFS CSV parsing, called by scripts/build_static.py, never by
+# the running server. Parsing both categories' stop_times.txt (5.5 MB +
+# 14 MB) and shapes.txt at every cold start was what was pushing Render's
+# free tier (512 MB) into an OOM kill. The server's own _load_static() below
+# just reads the compact data/static.json that script produces.
 
 
 def _download_static(category: str) -> None:
@@ -365,19 +373,28 @@ def _load_aliases() -> None:
 
 
 def _load_static() -> None:
+    """Runtime load: read the compact precomputed file, no CSV parsing, no
+    GTFS download. Run scripts/build_static.py to (re)generate it."""
     global _loaded
     if _loaded:
         return
-    for category in CATEGORIES:
-        if not (_cache_dir(category) / "stops.txt").exists():
-            _download_static(category)
-        _load_stops(category)
-        _load_routes(category)
-        shapes = _load_shapes(category)
-        _build_route_paths_and_distances(category, shapes)
+    if not STATIC_FILE.exists():
+        raise RuntimeError(f"{STATIC_FILE} is missing — run scripts/build_static.py first")
 
-    _build_stop_index()
-    _build_stop_groups()
+    data = json.loads(STATIC_FILE.read_text(encoding="utf-8"))
+    for stop_id, s in data["stops"].items():
+        _stops[stop_id] = {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}
+    _routes.update(data["routes"])
+    _short_name_to_route_id.update(data["short_name_to_route_id"])
+    _route_paths.update(data["route_paths"])
+    _stop_cum_dist.update(data["stop_cum_dist"])
+    _route_headsign.update(data["route_headsign"])
+    _trip_direction.update(data["trip_direction"])
+    for stop_id, pairs in data["stop_to_routes"].items():
+        _stop_to_routes[stop_id] = [tuple(pair) for pair in pairs]
+    for group in data["groups"]:
+        _groups_by_name[group["key"]] = StopGroup(name=group["name"], stop_ids=group["stop_ids"])
+
     _build_word_index()
     _load_aliases()
     _loaded = True
@@ -630,8 +647,28 @@ def _fetch_vehicles(category: str) -> bool:
             "lat": v.position.latitude,
             "lon": v.position.longitude,
             "speed_kmh": v.position.speed if v.position.HasField("speed") else None,
+            "seen_at": time.time(),
         }
     return True
+
+
+# A bus that stops broadcasting (out of service, GPS dropout) otherwise sits
+# in _vehicles forever — unbounded growth over an instance's uptime, not a
+# one-time load spike, which matches "OOM-killed mid-call" better than a
+# a cold-start spike would. Same 10-minute threshold where-bus itself uses.
+STALE_VEHICLE_SECONDS = 600
+
+
+def _evict_stale_vehicles() -> None:
+    now = time.time()
+    stale_ids = [vid for vid, v in _vehicles.items() if now - v["seen_at"] > STALE_VEHICLE_SECONDS]
+    if not stale_ids:
+        return
+    for vid in stale_ids:
+        del _vehicles[vid]
+    stale_set = set(stale_ids)
+    for key in [k for k in _eta_history if k[0] in stale_set]:
+        del _eta_history[key]
 
 
 def ensure_fresh() -> None:
@@ -649,13 +686,14 @@ def ensure_fresh() -> None:
         if _fetch_vehicles(category):
             any_ok = True
     _last_fetch_ok = any_ok
+    _evict_stale_vehicles()
 
     store.check_alerts(_alert_arrivals)
 
 
 # --------------------------------------------------------------- ETA engine
 
-_eta_history: dict[str, deque[int]] = {}
+_eta_history: dict[tuple[str, str], deque[int]] = {}  # (vehicle_id, stop_id) -> recent ETAs
 
 
 def _speed_mps(vehicle: dict) -> float:
@@ -666,7 +704,7 @@ def _speed_mps(vehicle: dict) -> float:
 
 
 def _smooth(vehicle_id: str, stop_id: str, raw_seconds: int) -> int:
-    key = f"{vehicle_id}_{stop_id}"
+    key = (vehicle_id, stop_id)
     history = _eta_history.setdefault(key, deque(maxlen=ETA_HISTORY_SIZE))
     history.append(raw_seconds)
     return round(sum(history) / len(history))

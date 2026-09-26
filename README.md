@@ -45,9 +45,10 @@ Check it answers:
 curl -X POST http://localhost:8000/tools/get_now
 ```
 
-The first request that needs GTFS data downloads and caches RapidKL's static
-schedule (`.gtfs_cache/`, a few seconds, one time only). Every request after
-that reads from disk.
+GTFS data itself is precomputed, not fetched at startup — `data/static.json`
+ships committed, so a fresh clone runs immediately. Refresh it after a GTFS
+update with `python scripts/build_static.py` (downloads both categories,
+parses them once, writes the compact file back).
 
 ## 2. Put the API on the public internet
 
