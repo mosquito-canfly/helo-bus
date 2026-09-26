@@ -152,6 +152,35 @@ function formatArgs(args) {
   return keys.map((k) => `${k}: ${JSON.stringify(args[k])}`).join("\n");
 }
 
+// Reuses the header's own bus glyph so every "this is a bus" signal in the
+// page is the same icon — just recoloured per route category.
+const BUS_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>' +
+  '<path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/>' +
+  '<circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
+
+// ETA rows styled like where-bus's own stop-selected view: icon chip, route
+// badge coloured by category (RapidKL maroon / MRT Feeder slate), bold ETA.
+function renderEtaList(arrivals) {
+  const list = el("div", "eta-list");
+  for (const arrival of arrivals) {
+    const category = arrival.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
+    const row = el("div", "eta-row");
+
+    const chip = el("span", "icon-chip");
+    chip.style.color = category === "rapid-bus-mrtfeeder" ? "var(--color-route-feeder)" : "var(--color-route-rapidkl)";
+    chip.innerHTML = BUS_ICON_SVG;
+
+    const badge = el("span", `route-badge ${category}`, `Route ${arrival.route}`);
+    const time = el("span", "eta-time", arrival.eta_human);
+
+    row.append(chip, badge, time);
+    list.append(row);
+  }
+  return list;
+}
+
 function renderCall(event) {
   clearEmpty(els.calls);
 
@@ -191,6 +220,10 @@ function renderCall(event) {
   msg.className = "call-msg";
   msg.textContent = (event.result && event.result.message) || "(no message)";
   card.append(msg);
+
+  if (event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length) {
+    card.append(renderEtaList(event.result.arrivals));
+  }
 
   els.calls.append(card);
   els.calls.scrollTop = els.calls.scrollHeight;

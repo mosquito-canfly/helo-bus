@@ -11,79 +11,66 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&family=Geist+Mono:wght@400;500&display=swap"
     />
     <style>
-      /* Design tokens ported from DESIGN.md (Uber-inspired system), mapped
-         1:1 onto its semantic names. Font substitutes per the file's own
-         "Note on Font Substitutes": Inter 700 (+ ss01) for the display face,
-         Inter 400/500 for text — both proprietary UberMove/UberMoveText
-         faces replaced with the recommended open-source stand-in. */
+      /* Design tokens ported from DESIGN.md — a re-implementation of
+         ../where-bus's own visual language (Next.js + Tailwind v4 + Geist),
+         not a copy of its markup. Category colour is the one signature: the
+         same maroon/slate pair where-bus uses for RapidKL vs MRT Feeder. */
       :root {
         /* colors.* */
-        --color-primary: #000000;
-        --color-on-primary: #ffffff;
-        --color-ink: #000000;
-        --color-body: #5e5e5e;
-        --color-mute: #afafaf;
-        --color-hairline-mid: #4b4b4b;
-        --color-canvas: #ffffff;
-        --color-canvas-soft: #efefef;
-        --color-canvas-softer: #f3f3f3;
-        --color-surface-pressed: #e2e2e2;
-        --color-link: #0000ee;
-        --color-on-dark: #ffffff;
-        --color-black-elevated: #282828;
+        --color-bg: #ffffff;
+        --color-fg: #2b2926;
+        --color-surface: #f9fafb;
+        --color-surface-hover: #f3f4f6;
+        --color-border-subtle: #f3f4f6;
+        --color-border: #e5e7eb;
+        --color-text-primary: #111827;
+        --color-text-secondary: #6b7280;
+        --color-text-muted: #9ca3af;
+        --color-route-rapidkl: #880808;
+        --color-route-feeder: #5e6673;
+        --color-route-rapidkl-tint: #8808080f;
+        --color-route-feeder-tint: #5e66730f;
+        --color-danger-bg: #fef2f2;
+        --color-danger-border: #fee2e2;
+        --color-danger-text: #dc2626;
 
-        /* typography.* — family. font-feature-settings "ss01" applied
-           wherever --font-display is used, per DESIGN.md's substitute note. */
-        --font-display: "Inter", system-ui, "Helvetica Neue", Arial, sans-serif;
-        --font-text: "Inter", system-ui, "Helvetica Neue", Arial, sans-serif;
-        /* utility face for JSON/code readouts — a role DESIGN.md doesn't define */
-        --font-mono:
-          "SF Mono", ui-monospace, "Cascadia Code", "Roboto Mono", Consolas,
-          monospace;
+        /* typography.* — family */
+        --font-sans: "Geist", system-ui, "Helvetica Neue", Arial, sans-serif;
+        --font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
 
         /* typography.* — size / weight / line-height triplets */
-        --type-display-xl-size: 36px;
-        --type-display-xl-weight: 700;
-        --type-display-xl-lh: 44px;
-        --type-display-sm-size: 20px;
-        --type-display-sm-weight: 700;
-        --type-display-sm-lh: 28px;
-        --type-body-lg-size: 18px;
-        --type-body-lg-weight: 500;
-        --type-body-lg-lh: 24px;
-        --type-body-md-size: 16px;
-        --type-body-md-weight: 400;
-        --type-body-md-lh: 24px;
-        --type-body-md-strong-size: 16px;
-        --type-body-md-strong-weight: 500;
-        --type-body-md-strong-lh: 20px;
-        --type-body-sm-size: 14px;
-        --type-body-sm-weight: 400;
-        --type-body-sm-lh: 20px;
-        --type-body-sm-strong-size: 14px;
-        --type-body-sm-strong-weight: 500;
-        --type-body-sm-strong-lh: 16px;
+        --type-title-lg-size: 20px;
+        --type-title-lg-weight: 700;
+        --type-title-lg-lh: 28px;
+        --type-title-md-size: 16px;
+        --type-title-md-weight: 700;
+        --type-title-md-lh: 22px;
+        --type-body-md-size: 14px;
+        --type-body-md-weight: 500;
+        --type-body-md-lh: 20px;
+        --type-body-md-regular-size: 14px;
+        --type-body-md-regular-weight: 400;
+        --type-body-md-regular-lh: 20px;
         --type-caption-size: 12px;
         --type-caption-weight: 400;
-        --type-caption-lh: 20px;
-        --type-button-large-size: 18px;
-        --type-button-large-weight: 500;
-        --type-button-large-lh: 24px;
-        --type-button-md-size: 16px;
-        --type-button-md-weight: 500;
-        --type-button-md-lh: 20px;
+        --type-caption-lh: 16px;
+        --type-eyebrow-size: 12px;
+        --type-eyebrow-weight: 700;
+        --type-eyebrow-lh: 16px;
+        --type-eta-size: 16px;
+        --type-eta-weight: 700;
+        --type-eta-lh: 20px;
 
         /* rounded.* */
         --radius-none: 0px;
         --radius-md: 8px;
         --radius-lg: 12px;
         --radius-xl: 16px;
-        --radius-pill: 999px;
-        --radius-pill-tab: 36px;
-        --radius-full: 9999px;
+        --radius-2xl: 24px;
+        --radius-pill: 9999px;
 
         /* spacing.* */
         --space-xxs: 4px;
@@ -93,12 +80,13 @@
         --space-lg: 16px;
         --space-xl: 20px;
         --space-2xl: 24px;
-        --space-3xl: 32px;
 
-        /* elevation — Level 0 is flat/no-shadow, the system default */
-        --shadow-level1: rgba(0, 0, 0, 0.12) 0px 4px 16px 0px;
-        --shadow-level2: rgba(0, 0, 0, 0.16) 0px 4px 16px 0px;
-        --shadow-level3: rgba(0, 0, 0, 0.16) 0px 2px 8px 0px;
+        /* shadow.* */
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        --shadow-sheet-mobile: 0 -4px 20px rgba(0, 0, 0, 0.1);
 
         --bar-h: 80px;
       }
@@ -114,11 +102,11 @@
 
       body {
         margin: 0;
-        background: var(--color-canvas);
-        color: var(--color-ink);
-        font-family: var(--font-text);
-        font-size: var(--type-body-md-size);
-        font-weight: var(--type-body-md-weight);
+        background: var(--color-bg);
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        font-size: var(--type-body-md-regular-size);
+        font-weight: var(--type-body-md-regular-weight);
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
         display: flex;
@@ -127,7 +115,9 @@
       }
 
       /* ------------------------------------------------------------ header */
-      /* component: nav-bar */
+      /* Where-bus's header is a floating search pill over the map; this app
+         has no map, but keeps the pill-controls-with-shadow language for
+         every header control. */
 
       .top {
         flex: none;
@@ -135,9 +125,9 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--space-lg);
-        padding: var(--space-lg) var(--space-3xl);
-        border-bottom: 1px solid var(--color-surface-pressed);
-        background: var(--color-canvas);
+        padding: var(--space-md) var(--space-2xl);
+        border-bottom: 1px solid var(--color-border-subtle);
+        background: var(--color-bg);
       }
 
       .brand {
@@ -147,15 +137,14 @@
         min-width: 0;
       }
 
-      /* monochrome logo tile — stands in for DESIGN.md's "monochrome SVG
-         logo bar", non-interactive so it skips the pill-shape rule */
+      /* component: icon-chip — neutral chip, coloured glyph */
       .mark {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         flex: none;
-        border-radius: var(--radius-lg);
-        background: var(--color-primary);
-        color: var(--color-on-primary);
+        border-radius: var(--radius-pill);
+        background: var(--color-surface-hover);
+        color: var(--color-route-rapidkl);
         display: grid;
         place-items: center;
       }
@@ -168,41 +157,42 @@
       }
       .brand h1 {
         margin: 0;
-        font-family: var(--font-text);
-        font-size: var(--type-body-md-strong-size);
-        font-weight: var(--type-body-md-strong-weight);
-        line-height: var(--type-body-md-strong-lh);
-        color: var(--color-ink);
+        font-size: var(--type-title-md-size);
+        font-weight: var(--type-title-md-weight);
+        line-height: var(--type-title-md-lh);
+        color: var(--color-text-primary);
         white-space: nowrap;
       }
       .brand p {
         margin: 0;
         font-size: var(--type-caption-size);
-        color: var(--color-body);
+        color: var(--color-text-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      /* status pill: canvas-soft by default; the "live" state polarity-flips
-         to ink black — the brand's own depth cue, repurposed to say "this
-         one matters" without adding a second accent colour */
+      /* status pill — the "live" state is the one place the RapidKL maroon
+         gets to be loud outside an actual alert, echoing where-bus's rule
+         that category colour is the system's only strong colour. */
       #status {
         flex: none;
         display: inline-flex;
         align-items: center;
         gap: var(--space-xs);
         font-size: var(--type-caption-size);
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         padding: var(--space-xs) var(--space-md);
         border-radius: var(--radius-pill);
-        background: var(--color-canvas-soft);
-        color: var(--color-body);
+        background: var(--color-surface);
+        color: var(--color-text-secondary);
+        border: 1px solid var(--color-border);
         transition:
           color 0.2s,
-          background 0.2s;
+          background 0.2s,
+          border-color 0.2s;
       }
       #status::before {
         content: "";
@@ -213,24 +203,25 @@
         opacity: 0.6;
       }
       #status[data-state="live"] {
-        color: var(--color-on-dark);
-        background: var(--color-primary);
+        color: #ffffff;
+        background: var(--color-route-rapidkl);
+        border-color: var(--color-route-rapidkl);
       }
       #status[data-state="live"]::before {
         opacity: 1;
         animation: pulse 1.4s ease-in-out infinite;
       }
       #status[data-state="busy"] {
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
+        color: var(--color-text-primary);
+        background: var(--color-surface);
       }
       #status[data-state="busy"]::before {
         animation: pulse 0.9s ease-in-out infinite;
       }
       #status[data-state="error"] {
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
-        box-shadow: inset 0 0 0 1.5px var(--color-ink);
+        color: var(--color-danger-text);
+        background: var(--color-danger-bg);
+        border-color: var(--color-danger-border);
       }
 
       @keyframes pulse {
@@ -257,9 +248,10 @@
         flex-direction: column;
         min-height: 0;
         min-width: 0;
+        background: var(--color-bg);
       }
       .pane + .pane {
-        border-left: 1px solid var(--color-surface-pressed);
+        border-left: 1px solid var(--color-border-subtle);
       }
 
       .pane-head {
@@ -269,26 +261,26 @@
         justify-content: space-between;
         gap: var(--space-sm);
         padding: var(--space-md) var(--space-xl);
-        border-bottom: 1px solid var(--color-surface-pressed);
-        background: var(--color-canvas);
+        border-bottom: 1px solid var(--color-border-subtle);
+        background: var(--color-bg);
       }
-      /* eyebrow label — DESIGN.md's one sanctioned uppercase-tracking use */
+      /* component: section-eyebrow */
       .pane-head h2 {
         margin: 0;
-        font-size: var(--type-caption-size);
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-size: var(--type-eyebrow-size);
+        font-weight: var(--type-eyebrow-weight);
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--color-body);
+        color: var(--color-text-muted);
       }
       .pane-head .hint {
         font-size: var(--type-caption-size);
-        color: var(--color-mute);
+        color: var(--color-text-muted);
       }
       .pane-head .count {
         font-size: var(--type-caption-size);
-        font-weight: 600;
-        color: var(--color-mute);
+        font-weight: 700;
+        color: var(--color-text-muted);
         font-variant-numeric: tabular-nums;
       }
 
@@ -299,20 +291,20 @@
         overscroll-behavior: contain;
         padding: var(--space-xl) var(--space-xl) var(--space-2xl);
         scrollbar-width: thin;
-        scrollbar-color: var(--color-surface-pressed) transparent;
+        scrollbar-color: var(--color-border) transparent;
       }
       .scroll::-webkit-scrollbar {
         width: 9px;
       }
       .scroll::-webkit-scrollbar-thumb {
-        background: var(--color-surface-pressed);
-        border-radius: var(--radius-full);
-        border: 3px solid var(--color-canvas);
+        background: var(--color-border);
+        border-radius: var(--radius-pill);
+        border: 3px solid var(--color-bg);
       }
 
       .empty {
-        color: var(--color-mute);
-        font-size: var(--type-body-sm-size);
+        color: var(--color-text-muted);
+        font-size: var(--type-body-md-regular-size);
         margin: 0;
         line-height: 1.6;
       }
@@ -348,28 +340,28 @@
       .who {
         display: block;
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-weight: 700;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--color-mute);
+        color: var(--color-text-muted);
         margin-bottom: var(--space-xxs);
       }
       .line.agent .who {
-        color: var(--color-ink);
+        color: var(--color-route-rapidkl);
       }
 
       .line p {
         margin: 0;
-        font-size: var(--type-body-md-size);
-        line-height: var(--type-body-md-lh);
+        font-size: var(--type-body-md-regular-size);
+        line-height: var(--type-body-md-regular-lh);
       }
       .line.agent p {
-        color: var(--color-ink);
+        color: var(--color-text-primary);
       }
       .line.user p {
-        color: var(--color-body);
+        color: var(--color-text-secondary);
         padding-left: var(--space-md);
-        border-left: 2px solid var(--color-surface-pressed);
+        border-left: 2px solid var(--color-border);
       }
 
       .used {
@@ -379,53 +371,54 @@
         margin-top: var(--space-sm);
       }
 
-      /* tool chip — category-button, scaled down for inline density */
+      /* tool chip — icon-chip made clickable, danger colour when the call failed */
       .chip {
-        font-family: var(--font-text);
-        font-size: var(--type-body-sm-strong-size);
-        font-weight: var(--type-body-sm-strong-weight);
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
+        font-family: var(--font-sans);
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        color: var(--color-text-secondary);
+        background: var(--color-surface-hover);
         border: none;
         border-radius: var(--radius-pill);
         padding: var(--space-xs) var(--space-md);
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, color 0.15s;
       }
       .chip::before {
         content: "↳ ";
-        color: var(--color-mute);
+        color: var(--color-text-muted);
       }
       .chip:hover {
-        background: var(--color-surface-pressed);
+        background: var(--color-border);
+        color: var(--color-text-primary);
       }
       .chip:focus-visible {
-        outline: 2px solid var(--color-ink);
+        outline: 2px solid var(--color-route-rapidkl);
         outline-offset: 2px;
       }
       .chip.warn {
-        background: var(--color-ink);
-        color: var(--color-on-dark);
+        background: var(--color-danger-bg);
+        color: var(--color-danger-text);
       }
       .chip.warn::before {
-        color: var(--color-mute);
+        color: var(--color-danger-text);
+        opacity: 0.7;
       }
       .chip.warn:hover {
-        background: var(--color-black-elevated);
+        background: var(--color-danger-border);
       }
 
       /* -------------------------------------------------------- tool calls */
-      /* component: card-soft-tinted (canvas-soft keeps each log entry
-         legible against the white page — plain card-content would blend
-         into it). A failed call polarity-flips to ink black
-         instead of taking a warning colour — DESIGN.md's own "the polarity
-         shift IS the depth cue" mechanism, reused to mean "this one failed"
-         without a second accent colour. */
+      /* component: result-card / error-banner. A failed call uses the
+         system's one real semantic colour (danger red) instead of a
+         improvised "polarity flip" — where-bus reserves red for exactly
+         this: a genuine failure, never a route or a warning-lite. */
 
       .call {
         border-radius: var(--radius-xl);
-        background: var(--color-canvas-soft);
-        color: var(--color-ink);
+        background: var(--color-surface);
+        color: var(--color-text-primary);
+        border: 1px solid var(--color-border-subtle);
         padding: var(--space-md) var(--space-lg);
         margin-bottom: var(--space-sm);
         animation: rise 0.26s ease both;
@@ -433,17 +426,17 @@
         transition:
           box-shadow 0.35s,
           background 0.35s,
-          color 0.35s;
+          border-color 0.35s;
       }
       .call:last-child {
         margin-bottom: 0;
       }
       .call.warn {
-        background: var(--color-ink);
-        color: var(--color-on-dark);
+        background: var(--color-danger-bg);
+        border-color: var(--color-danger-border);
       }
       .call.flash {
-        box-shadow: var(--shadow-level2);
+        box-shadow: var(--shadow-xl);
       }
 
       .call header {
@@ -453,32 +446,34 @@
         gap: var(--space-sm);
       }
       .call-name {
-        font-family: var(--font-text);
-        font-size: var(--type-body-sm-strong-size);
-        font-weight: var(--type-body-sm-strong-weight);
-        color: var(--color-ink);
+        font-family: var(--font-sans);
+        font-size: var(--type-body-md-size);
+        font-weight: var(--type-body-md-weight);
+        color: var(--color-text-primary);
         word-break: break-all;
       }
       .call.warn .call-name {
-        color: var(--color-on-dark);
+        color: var(--color-danger-text);
       }
       .call-time {
         font-family: var(--font-mono);
         font-size: 10.5px;
-        color: var(--color-body);
+        color: var(--color-text-secondary);
         font-variant-numeric: tabular-nums;
         flex: none;
       }
       .call.warn .call-time {
-        color: var(--color-mute);
+        color: var(--color-danger-text);
+        opacity: 0.7;
       }
 
       .call-args {
         font-family: var(--font-mono);
         font-size: 11px;
         line-height: 1.5;
-        color: var(--color-body);
-        background: var(--color-canvas);
+        color: var(--color-text-secondary);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border-subtle);
         border-radius: var(--radius-md);
         padding: var(--space-xs) var(--space-sm);
         margin: var(--space-sm) 0;
@@ -486,8 +481,8 @@
         white-space: pre;
       }
       .call.warn .call-args {
-        background: var(--color-black-elevated);
-        color: var(--color-mute);
+        background: #ffffff;
+        border-color: var(--color-danger-border);
       }
       .call-args:empty {
         display: none;
@@ -495,28 +490,85 @@
 
       .call-msg {
         margin: 0;
-        font-size: var(--type-body-sm-size);
-        color: var(--color-ink);
+        font-size: var(--type-caption-size);
+        color: var(--color-text-primary);
       }
       .call.warn .call-msg {
-        color: var(--color-on-dark);
+        color: var(--color-danger-text);
       }
 
       .call-reason {
         display: inline-block;
         font-size: 10px;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--color-ink);
-        background: var(--color-canvas);
+        color: var(--color-text-secondary);
+        background: var(--color-surface-hover);
         border-radius: var(--radius-md);
         padding: 1px var(--space-sm);
         margin-bottom: var(--space-xs);
       }
       .call.warn .call-reason {
-        color: var(--color-on-dark);
-        background: var(--color-black-elevated);
+        color: var(--color-danger-text);
+        background: var(--color-danger-border);
+      }
+
+      /* component: eta-row — a live arrival, rendered like where-bus's own
+         stop-selected ETA list: icon chip, route badge, bold ETA at the end. */
+      .eta-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-xs);
+        margin: var(--space-sm) 0;
+      }
+      .eta-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-xl);
+        padding: var(--space-sm) var(--space-md);
+      }
+      .eta-row .icon-chip {
+        width: 28px;
+        height: 28px;
+        flex: none;
+        border-radius: var(--radius-pill);
+        background: var(--color-surface-hover);
+        display: grid;
+        place-items: center;
+      }
+      .eta-row .icon-chip svg {
+        width: 15px;
+        height: 15px;
+      }
+      /* component: route-badge — category colour lives on the glyph/text,
+         never the chip background, per DESIGN.md */
+      .route-badge {
+        font-family: var(--font-sans);
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        border-radius: var(--radius-pill);
+        padding: 2px var(--space-sm);
+        flex: none;
+      }
+      .route-badge.rapid-bus-kl {
+        color: var(--color-route-rapidkl);
+        background: var(--color-route-rapidkl-tint);
+      }
+      .route-badge.rapid-bus-mrtfeeder {
+        color: var(--color-route-feeder);
+        background: var(--color-route-feeder-tint);
+      }
+      .eta-row .eta-time {
+        margin-left: auto;
+        font-size: var(--type-eta-size);
+        font-weight: var(--type-eta-weight);
+        color: var(--color-text-primary);
+        flex: none;
+        font-variant-numeric: tabular-nums;
       }
 
       /* ------------------------------------------------------- control bar */
@@ -528,10 +580,10 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--space-lg);
-        padding: 0 var(--space-3xl);
+        padding: 0 var(--space-2xl);
         padding-bottom: env(safe-area-inset-bottom);
-        border-top: 1px solid var(--color-surface-pressed);
-        background: var(--color-canvas);
+        border-top: 1px solid var(--color-border-subtle);
+        background: var(--color-bg);
       }
 
       .bar-left {
@@ -546,32 +598,31 @@
         font-size: 15px;
         font-weight: 500;
         font-variant-numeric: tabular-nums;
-        color: var(--color-mute);
+        color: var(--color-text-muted);
         flex: none;
         transition: color 0.2s;
       }
       #timer[data-state="running"] {
-        color: var(--color-ink);
+        color: var(--color-route-rapidkl);
       }
       /* Held after the call ends, so the length of the last one stays readable. */
       #timer[data-state="ended"] {
-        color: var(--color-body);
+        color: var(--color-text-secondary);
       }
 
-      /* component: button-large-rounded — the documented exception to the
-         pill rule, reserved for the single primary CTA of a form-like
-         control (the ride-request "Yes, help me" button; here, the call). */
+      /* Primary CTA — the one place the system's brand colour gets to fill
+         a large surface, matching where-bus's single strong-colour rule. */
       #talk {
-        font-family: var(--font-text);
-        font-size: var(--type-button-large-size);
-        font-weight: var(--type-button-large-weight);
-        line-height: var(--type-button-large-lh);
-        padding: var(--space-lg) var(--space-xl);
-        border-radius: var(--radius-xl);
-        border: 1.5px solid var(--color-primary);
-        background: var(--color-primary);
-        color: var(--color-on-primary);
+        font-family: var(--font-sans);
+        font-size: var(--type-title-md-size);
+        font-weight: 700;
+        padding: var(--space-md) var(--space-xl);
+        border-radius: var(--radius-pill);
+        border: 1.5px solid var(--color-route-rapidkl);
+        background: var(--color-route-rapidkl);
+        color: #ffffff;
         cursor: pointer;
+        box-shadow: var(--shadow-md);
         transition:
           background 0.15s,
           color 0.15s,
@@ -580,42 +631,42 @@
           opacity 0.15s;
       }
       #talk:hover:not(:disabled) {
-        background: var(--color-black-elevated);
-        border-color: var(--color-black-elevated);
+        background: #6b0606;
+        border-color: #6b0606;
       }
       #talk:active:not(:disabled) {
-        transform: translateY(1px);
+        transform: scale(0.98);
       }
       #talk:disabled {
         opacity: 0.4;
         cursor: not-allowed;
       }
       #talk:focus-visible {
-        outline: 2px solid var(--color-ink);
+        outline: 2px solid var(--color-route-rapidkl);
         outline-offset: 3px;
       }
-      /* "End call" flips polarity to button-secondary: white fill, black
-         outline — same black/white duet, opposite emphasis. */
+      /* "End call" flips to a quiet outline pill instead of the solid maroon */
       #talk.ending {
-        background: var(--color-canvas);
-        border-color: var(--color-primary);
-        color: var(--color-ink);
+        background: var(--color-bg);
+        border-color: var(--color-border);
+        color: var(--color-danger-text);
       }
       #talk.ending:hover:not(:disabled) {
-        background: var(--color-canvas-soft);
+        background: var(--color-danger-bg);
+        border-color: var(--color-danger-border);
       }
 
       .meta {
         font-family: var(--font-mono);
         font-size: 10.5px;
-        color: var(--color-mute);
+        color: var(--color-text-muted);
         text-align: right;
         line-height: 1.5;
         min-width: 0;
         overflow: hidden;
       }
       .meta b {
-        color: var(--color-body);
+        color: var(--color-text-secondary);
         font-weight: 500;
       }
       .meta span {
@@ -626,17 +677,17 @@
       }
 
       /* ------------------------------------------------------- alert banner */
-      /* component: promo-card-on-dark, full-bleed. The brand's polarity-flip
-         band is its own loudest move — solid ink, white display-weight
-         text, no colour needed to make this impossible to miss. */
+      /* The one moment RapidKL maroon fills an entire surface outside the
+         call button — an arrival alert is, after all, about the bus. */
 
       .alert-banner {
         flex: none;
         display: flex;
         align-items: center;
         gap: var(--space-md);
-        padding: var(--space-lg) var(--space-3xl);
-        background: var(--color-primary);
+        padding: var(--space-lg) var(--space-2xl);
+        background: var(--color-route-rapidkl);
+        box-shadow: var(--shadow-md);
         animation: alert-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
       }
       .alert-banner[hidden] {
@@ -656,18 +707,17 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
-        background: var(--color-on-dark);
+        background: #ffffff;
         flex: none;
         animation: pulse 1s ease-in-out infinite;
       }
       .alert-banner p {
         margin: 0;
-        font-family: var(--font-display);
-        font-feature-settings: "ss01";
-        font-size: var(--type-display-sm-size);
-        font-weight: var(--type-display-sm-weight);
-        line-height: var(--type-display-sm-lh);
-        color: var(--color-on-dark);
+        font-family: var(--font-sans);
+        font-size: var(--type-title-lg-size);
+        font-weight: var(--type-title-lg-weight);
+        line-height: var(--type-title-lg-lh);
+        color: #ffffff;
       }
 
       /* --------------------------------------------------------- demo data */
@@ -679,25 +729,27 @@
         flex: none;
       }
 
-      /* component: button-subtle */
+      /* component: icon-pill-button */
       .ghost {
-        font-family: var(--font-text);
-        font-size: var(--type-body-sm-strong-size);
-        font-weight: var(--type-body-sm-strong-weight);
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
-        border: none;
+        font-family: var(--font-sans);
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        color: var(--color-text-secondary);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
         border-radius: var(--radius-pill);
         padding: var(--space-sm) var(--space-lg);
         cursor: pointer;
         white-space: nowrap;
-        transition: background 0.15s;
+        box-shadow: var(--shadow-md);
+        transition: background 0.15s, color 0.15s;
       }
       .ghost:hover {
-        background: var(--color-surface-pressed);
+        background: var(--color-surface-hover);
+        color: var(--color-text-primary);
       }
       .ghost:focus-visible {
-        outline: 2px solid var(--color-ink);
+        outline: 2px solid var(--color-route-rapidkl);
         outline-offset: 2px;
       }
 
@@ -716,19 +768,21 @@
       .modal-backdrop {
         position: absolute;
         inset: 0;
-        background: rgba(0, 0, 0, 0.55);
+        background: rgba(17, 24, 39, 0.45);
+        backdrop-filter: blur(3px);
       }
 
-      /* component: card-elevated (Level 2 drop — modal surface) */
+      /* component: panel-overlay */
       .modal-card {
         position: relative;
         width: min(680px, 100%);
         max-height: min(82dvh, 760px);
         display: flex;
         flex-direction: column;
-        background: var(--color-canvas);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-level2);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-2xl);
         overflow: hidden;
         animation: pop 0.2s ease both;
       }
@@ -751,27 +805,26 @@
         justify-content: space-between;
         gap: var(--space-md);
         padding: var(--space-lg) var(--space-xl);
-        border-bottom: 1px solid var(--color-surface-pressed);
+        border-bottom: 1px solid var(--color-border-subtle);
       }
       .modal-head h2 {
         margin: 0;
-        font-family: var(--font-display);
-        font-feature-settings: "ss01";
-        font-size: var(--type-display-sm-size);
-        font-weight: var(--type-display-sm-weight);
-        line-height: var(--type-display-sm-lh);
-        color: var(--color-ink);
+        font-family: var(--font-sans);
+        font-size: var(--type-title-lg-size);
+        font-weight: var(--type-title-lg-weight);
+        line-height: var(--type-title-lg-lh);
+        color: var(--color-text-primary);
       }
 
-      /* component: icon-button-circular */
+      /* component: icon-pill-button, circular */
       .icon-btn {
         font: inherit;
         font-size: 14px;
         line-height: 1;
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
-        border: none;
-        border-radius: var(--radius-full);
+        color: var(--color-text-secondary);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-pill);
         width: 32px;
         height: 32px;
         flex: none;
@@ -779,10 +832,11 @@
         transition: background 0.15s;
       }
       .icon-btn:hover {
-        background: var(--color-surface-pressed);
+        background: var(--color-surface-hover);
+        color: var(--color-text-primary);
       }
       .icon-btn:focus-visible {
-        outline: 2px solid var(--color-ink);
+        outline: 2px solid var(--color-route-rapidkl);
         outline-offset: 2px;
       }
 
@@ -804,21 +858,21 @@
       }
       .block-head h3 {
         margin: 0;
-        font-size: var(--type-caption-size);
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-size: var(--type-eyebrow-size);
+        font-weight: var(--type-eyebrow-weight);
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--color-ink);
+        color: var(--color-route-rapidkl);
       }
       .block-head .src {
         font-family: var(--font-mono);
         font-size: 10.5px;
-        color: var(--color-mute);
+        color: var(--color-text-muted);
       }
       .block-note {
         margin: var(--space-md) 0 var(--space-md);
-        font-size: var(--type-body-sm-size);
-        color: var(--color-body);
+        font-size: var(--type-body-md-regular-size);
+        color: var(--color-text-secondary);
         line-height: 1.5;
       }
 
@@ -827,18 +881,18 @@
         grid-template-columns: 92px 1fr;
         gap: var(--space-xs) var(--space-md);
         margin: 0 0 var(--space-md);
-        font-size: var(--type-body-sm-size);
+        font-size: var(--type-body-md-regular-size);
       }
       .kv dt {
-        color: var(--color-mute);
+        color: var(--color-text-muted);
         font-size: 10.5px;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.06em;
         padding-top: 3px;
       }
       .kv dd {
         margin: 0;
-        color: var(--color-ink);
+        color: var(--color-text-primary);
         font-weight: 500;
       }
 
@@ -847,19 +901,19 @@
         flex-wrap: wrap;
         gap: var(--space-xs);
       }
-      /* component: category-button */
+      /* component: route-badge shape reused generically for keyterm/tool pills */
       .pill {
-        font-family: var(--font-text);
-        font-size: var(--type-body-sm-strong-size);
-        font-weight: var(--type-body-sm-strong-weight);
-        color: var(--color-ink);
-        background: var(--color-canvas-soft);
+        font-family: var(--font-sans);
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        color: var(--color-text-secondary);
+        background: var(--color-surface-hover);
         border-radius: var(--radius-pill);
         padding: var(--space-xs) var(--space-md);
       }
       .pill.tool {
-        color: var(--color-on-dark);
-        background: var(--color-primary);
+        color: var(--color-route-rapidkl);
+        background: var(--color-route-rapidkl-tint);
       }
 
       /* ------------------------------------------------------------ mobile */
@@ -887,21 +941,31 @@
           padding: var(--space-md) var(--space-lg);
         }
         .alert-banner p {
-          font-size: var(--type-body-lg-size);
-          line-height: var(--type-body-lg-lh);
+          font-size: var(--type-title-md-size);
+          line-height: var(--type-title-md-lh);
         }
         main {
           grid-template-columns: 1fr;
           overflow: visible;
         }
+        /* Nod to where-bus's bottom-sheet: the second stacked pane picks up
+           rounded top corners and a lifted shadow instead of a flat divider —
+           the sheet's signature look, without the drag/dismiss mechanics a
+           two-pane transcript demo doesn't need. */
         .pane + .pane {
           border-left: none;
-          border-top: 1px solid var(--color-surface-pressed);
+          border-top: none;
+          border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+          box-shadow: var(--shadow-sheet-mobile);
+          margin-top: -var(--space-lg);
+          position: relative;
+          z-index: 1;
         }
         .pane-head {
           position: sticky;
           top: 0;
           z-index: 5;
+          border-radius: inherit;
         }
         .scroll {
           overflow: visible;
@@ -923,7 +987,7 @@
         }
         .modal-card {
           max-height: 88dvh;
-          border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+          border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
         }
         .kv {
           grid-template-columns: 1fr;
@@ -937,7 +1001,7 @@
       @media (max-width: 460px) {
         #talk {
           padding: var(--space-md) var(--space-xl);
-          font-size: var(--type-button-md-size);
+          font-size: var(--type-body-md-size);
         }
         .meta {
           font-size: 10px;
@@ -962,8 +1026,8 @@
         <div class="mark">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

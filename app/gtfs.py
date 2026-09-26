@@ -206,7 +206,11 @@ def _load_stops(category: str) -> None:
 def _load_routes(category: str) -> None:
     for row in _read_csv(category, "routes.txt"):
         short_name = row["route_short_name"].strip() or row["route_long_name"].strip()
-        _routes[row["route_id"]] = {"short_name": short_name, "long_name": row["route_long_name"].strip()}
+        _routes[row["route_id"]] = {
+            "short_name": short_name,
+            "long_name": row["route_long_name"].strip(),
+            "category": category,
+        }
         _short_name_to_route_id.setdefault(short_name, row["route_id"])
 
 
@@ -736,6 +740,7 @@ def _arrivals_for(route_id: str, direction_id: int, stop_id: str, route_short_na
         results.append(
             {
                 "route": route_short_name,
+                "category": _routes.get(route_id, {}).get("category"),
                 "eta_seconds": smoothed,
                 "eta_human": _eta_human(smoothed, distance_m),
             }

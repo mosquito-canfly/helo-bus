@@ -1,98 +1,89 @@
 ---
 version: alpha
-name: Uber-Inspired-design-analysis
-description: An inspired interpretation of Uber's design language — a transportation-and-delivery super-app brand whose web surface is a black-and-white duet, framed by a custom geometric display sans, accented by a single signature pill shape (radius 999px) on every interactive element, and decorated only by editorial 4:3 illustrations of riders, drivers, and city objects.
+name: Helo-Bus-where-bus-derived-design
+description: A design system re-implementing the visual language of ../where-bus (Next.js + Tailwind v4 + Geist), a live RapidKL/MRT-Feeder tracker — floating pill controls over a full-bleed surface, category colour-coding (RapidKL maroon vs MRT Feeder slate), soft rounded-2xl card stacks for live data, and a bottom-sheet-on-mobile / left-sidebar-on-desktop panel that is the system's one structural signature.
 
 colors:
-  primary: "#000000"
-  on-primary: "#ffffff"
-  ink: "#000000"
-  body: "#5e5e5e"
-  mute: "#afafaf"
-  hairline-mid: "#4b4b4b"
-  canvas: "#ffffff"
-  canvas-soft: "#efefef"
-  canvas-softer: "#f3f3f3"
-  surface-pressed: "#e2e2e2"
-  link: "#0000ee"
-  on-dark: "#ffffff"
-  black-elevated: "#282828"
+  background: "#FFFFFF"
+  foreground: "#2B2926"
+  surface: "#F9FAFB"
+  surface-card: "#F9FAFB"
+  surface-card-hover: "#F3F4F6"
+  border-subtle: "#F3F4F6"
+  border-default: "#E5E7EB"
+  text-primary: "#111827"
+  text-secondary: "#6B7280"
+  text-muted: "#9CA3AF"
+  route-rapidkl: "#880808"
+  route-feeder: "#5e6673"
+  danger-bg: "#FEF2F2"
+  danger-border: "#FEE2E2"
+  danger-text: "#DC2626"
+  cream: "#F5EDE3"
+  terracotta: "#C2805F"
+  blush: "#EDD5BE"
+  dark-bg-base: "#0D0F10"
+  dark-bg-surface: "#141718"
+  dark-bg-elevated: "#1C1F21"
+  dark-bg-active: "#212527"
+  dark-border-subtle: "rgba(255,255,255,0.06)"
+  dark-border-card: "rgba(255,255,255,0.07)"
+  dark-text-primary: "#F0F2F3"
+  dark-text-secondary: "#8A9199"
+  dark-text-muted: "#4A5158"
+  dark-route-rapidkl: "#9CAF88"
+  dark-route-feeder: "#F0F2F3"
+  dark-accent-teal: "#4A8B8B"
 
 typography:
-  display-xxl:
-    fontFamily: UberMove, UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 52px
-    fontWeight: 700
-    lineHeight: 64px
-  display-xl:
-    fontFamily: UberMove, UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 36px
-    fontWeight: 700
-    lineHeight: 44px
-  display-lg:
-    fontFamily: UberMove, UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 32px
-    fontWeight: 700
-    lineHeight: 40px
-  display-md:
-    fontFamily: UberMove, UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 24px
-    fontWeight: 700
-    lineHeight: 32px
-  display-sm:
-    fontFamily: UberMove, UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
+  title-lg:
+    fontFamily: Geist, system-ui, sans-serif
     fontSize: 20px
     fontWeight: 700
     lineHeight: 28px
-  body-lg:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 18px
-    fontWeight: 500
-    lineHeight: 24px
+  title-md:
+    fontFamily: Geist, system-ui, sans-serif
+    fontSize: 16px
+    fontWeight: 700
+    lineHeight: 22px
   body-md:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 16px
-    fontWeight: 400
-    lineHeight: 24px
-  body-md-strong:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 16px
+    fontFamily: Geist, system-ui, sans-serif
+    fontSize: 14px
     fontWeight: 500
     lineHeight: 20px
-  body-sm:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
+  body-md-regular:
+    fontFamily: Geist, system-ui, sans-serif
     fontSize: 14px
     fontWeight: 400
     lineHeight: 20px
-  body-sm-strong:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 14px
-    fontWeight: 500
-    lineHeight: 16px
   caption:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
+    fontFamily: Geist, system-ui, sans-serif
     fontSize: 12px
     fontWeight: 400
-    lineHeight: 20px
-  button-large:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
-    fontSize: 18px
-    fontWeight: 500
-    lineHeight: 24px
-  button-md:
-    fontFamily: UberMoveText, system-ui, Helvetica Neue, Arial, sans-serif
+    lineHeight: 16px
+  eyebrow:
+    fontFamily: Geist, system-ui, sans-serif
+    fontSize: 12px
+    fontWeight: 700
+    lineHeight: 16px
+  eta-number:
+    fontFamily: Geist, system-ui, sans-serif
     fontSize: 16px
-    fontWeight: 500
+    fontWeight: 700
     lineHeight: 20px
+  mono:
+    fontFamily: Geist Mono, ui-monospace, monospace
+    fontSize: 12px
+    fontWeight: 400
+    lineHeight: 18px
 
 rounded:
   none: 0px
   md: 8px
   lg: 12px
   xl: 16px
-  pill: 999px
-  pill-tab: 36px
-  full: 9999px
+  2xl: 24px
+  pill: 9999px
 
 spacing:
   xxs: 4px
@@ -102,535 +93,268 @@ spacing:
   lg: 16px
   xl: 20px
   2xl: 24px
-  3xl: 32px
+
+shadow:
+  sm: "0 1px 2px rgba(0,0,0,0.05)"
+  md: "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)"
+  xl: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)"
+  2xl: "0 25px 50px -12px rgba(0,0,0,0.25)"
+  sheet-mobile: "0 -4px 20px rgba(0,0,0,0.1)"
+  sheet-desktop: "4px 0 20px rgba(0,0,0,0.1)"
 
 components:
-  nav-bar:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md-strong}"
-    padding: "{spacing.lg} {spacing.3xl}"
-  nav-link:
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md-strong}"
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.pill}"
-    padding: "{spacing.md} {spacing.md}"
-  button-secondary:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.pill}"
-    padding: "{spacing.md} {spacing.md}"
-  button-subtle:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.pill}"
-    padding: "{spacing.md} {spacing.lg}"
-  button-floating:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.button-md}"
-    rounded: "{rounded.pill}"
-    padding: "{spacing.md}"
-  button-large-rounded:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.button-large}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.lg} {spacing.xl}"
-  button-tab-translucent:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md-strong}"
-    rounded: "{rounded.pill-tab}"
-  text-input:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
+  search-pill:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.text-primary}"
     typography: "{typography.body-md}"
-    rounded: "{rounded.none}"
-    padding: "{spacing.lg}"
-  text-input-on-soft:
-    backgroundColor: "{colors.canvas-softer}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.none}"
-    padding: "{spacing.lg}"
-  card-content:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  card-elevated:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  card-soft-tinted:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  promo-card-illustrated:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  promo-card-on-dark:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.display-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  request-form-card:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.lg}"
-  request-form-input-row:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.none}"
-    padding: "{spacing.lg}"
-  category-button:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-sm-strong}"
     rounded: "{rounded.pill}"
     padding: "{spacing.sm} {spacing.lg}"
-  faq-row:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md-strong}"
-    padding: "{spacing.lg} 0"
-  app-download-pill:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.body-md-strong}"
+    shadow: "{shadow.md}"
+    border: "{colors.border-default}"
+  icon-pill-button:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.text-secondary}"
     rounded: "{rounded.pill}"
-    padding: "{spacing.md} {spacing.xl}"
-  hero-band-light:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-xxl}"
-    padding: "{spacing.3xl} {spacing.3xl}"
-  hero-band-dark:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.display-xxl}"
-    padding: "{spacing.3xl} {spacing.3xl}"
-  showcase-image-card:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.display-xxl}"
+    padding: "{spacing.sm}"
+    shadow: "{shadow.md}"
+    border: "{colors.border-default}"
+  icon-chip:
+    backgroundColor: "{colors.surface-card-hover}"
+    rounded: "{rounded.pill}"
+    padding: "{spacing.xs} {spacing.sm}"
+  result-card:
+    backgroundColor: "rgba(255,255,255,0.7)"
+    textColor: "{colors.foreground}"
     rounded: "{rounded.xl}"
-    padding: "{spacing.3xl}"
-  link-blue:
-    textColor: "{colors.link}"
-    typography: "{typography.body-md}"
-  link-on-dark:
-    textColor: "{colors.on-dark}"
-    typography: "{typography.body-md}"
-  link-mute:
-    textColor: "{colors.hairline-mid}"
-    typography: "{typography.body-md}"
-  link-mute-soft:
-    textColor: "{colors.mute}"
-    typography: "{typography.body-md}"
-  icon-button-circular:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.full}"
-  footer:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.body-sm}"
-    padding: "{spacing.3xl} {spacing.3xl}"
-
-  # ─── Examples (illustrative) — auto-derived; resolve any TO_FILL markers below ───
-  ex-pricing-tier:
-    description: "Default tier card. Mirrors card-content chrome with canvas-soft surface and a faint border."
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.ink}"
-    borderColor: "{colors.surface-pressed}"
+    padding: "{spacing.lg}"
+    border: "{colors.border-subtle}"
+    shadow: "{shadow.sm}"
+  eta-row:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-primary}"
     rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  ex-pricing-tier-featured:
-    description: "Featured tier — polarity-flipped to ink with white text."
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-primary}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  ex-product-selector:
-    description: "Plan picker — re-purposed for the brand's Ride / Eats / Reserve tier picker. Uses category-button pills inside the frame."
-    backgroundColor: "{colors.canvas-soft}"
+    padding: "{spacing.md}"
+    border: "{colors.border-default}"
+  route-badge:
+    rounded: "{rounded.pill}"
+    padding: "2px {spacing.sm}"
+    typography: "{typography.caption}"
+  direction-pill:
+    rounded: "{rounded.pill}"
+    padding: "2px {spacing.sm}"
+    typography: "{typography.caption}"
+  section-eyebrow:
+    textColor: "{colors.text-muted}"
+    typography: "{typography.eyebrow}"
+  panel-overlay:
+    backgroundColor: "rgba(255,255,255,0.9)"
+    rounded: "{rounded.2xl}"
+    padding: "{spacing.xl}"
+    shadow: "{shadow.2xl}"
+    border: "{colors.border-default}"
+  sheet-mobile:
+    backgroundColor: "{colors.background}"
+    rounded: "{rounded.2xl} {rounded.2xl} 0 0"
+    shadow: "{shadow.sheet-mobile}"
+  sheet-desktop:
+    backgroundColor: "{colors.background}"
     rounded: "{rounded.none}"
-    padding: "{spacing.2xl}"
-  ex-cart-drawer:
-    description: "Subscription summary — line items per add-on (NOT a literal e-commerce cart)."
-    backgroundColor: "{colors.canvas}"
+    shadow: "{shadow.sheet-desktop}"
+  error-banner:
+    backgroundColor: "{colors.danger-bg}"
+    textColor: "{colors.danger-text}"
+    border: "{colors.danger-border}"
     rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-    item-divider: "{colors.surface-pressed}"
-  ex-app-shell-row:
-    description: "Sidebar nav row. Active state uses brand primary as a left-edge indicator bar."
-    backgroundColor: "{colors.canvas}"
-    activeIndicator: "{colors.primary}"
-    rounded: "{rounded.md}"
-    padding: "{spacing.md} {spacing.lg}"
-  ex-data-table-cell:
-    description: "Default data-table th + td chrome. Header uses body-sm-strong 500 weight; body uses body-sm."
-    headerBackground: "{colors.canvas-soft}"
-    headerTypography: "{typography.body-sm-strong}"
-    bodyTypography: "{typography.body-sm}"
-    cellPadding: "{spacing.md} {spacing.lg}"
-    rowBorder: "{colors.surface-pressed}"
-  ex-auth-form-card:
-    description: "Sign-in / sign-up card. Mirrors card-content chrome with text-input primitives inside."
-    backgroundColor: "{colors.canvas-soft}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  ex-modal-card:
-    description: "Modal dialog surface — same chrome as card-content with Level 2 drop shadow."
-    backgroundColor: "{colors.canvas}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.2xl}"
-  ex-empty-state-card:
-    description: "Empty-state illustration frame. Generous padding on canvas-soft surface."
-    backgroundColor: "{colors.canvas-soft}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.3xl}"
-    captionTypography: "{typography.body-md}"
-  ex-toast:
-    description: "Toast notification surface — flat-cornered card-content chrome with Level 2 drop shadow."
-    backgroundColor: "{colors.canvas}"
-    rounded: "{rounded.xl}"
-    padding: "{spacing.md} {spacing.lg}"
-    typography: "{typography.body-sm}"
+    padding: "{spacing.lg}"
 
 ---
 
-
 ## Overview
 
-Uber is a transportation-and-delivery super-app — ride, eats, freight, the whole urban logistics layer — and the brand's web surface signals that scale through restraint: no third colour, no accent palette, no illustration that fights the headline. The page is structurally a black-and-white duet, where black `{colors.primary}` is the conversion anchor (every CTA pill, every nav login button, the footer fill) and `{colors.canvas}` white carries everything else. The only consistent decoration is a body of editorial 4:3 illustrations — riders, drivers, parking lots, cars-on-highway — that ground the marketing without leaking accent colour into the system.
+where-bus is a live transit tracker for Kuala Lumpur's RapidKL bus network and MRT Feeder shuttles — a full-bleed map with floating controls, not a marketing page. Its whole visual grammar exists to keep live, changing data (bus positions, ETAs, route lists) legible while the map stays the star: controls float as white pills over the map, data surfaces as soft rounded-2xl card stacks, and the one thing every screen agrees on is that **RapidKL and MRT Feeder are two different colours, always** — maroon `{colors.route-rapidkl}` `#880808` for RapidKL buses, slate `{colors.route-feeder}` `#5e6673` for MRT Feeder shuttles, on every icon, route chip, and marker in the system.
 
-Type is the second decisive voice. Two custom faces carry every page: `UberMove` at weight 700 for headlines (32 – 52 px display sizes with tight 1.22 – 1.25 line-height, never letter-spaced), and `UberMoveText` at weights 400 / 500 for body, button, and link. The pairing reads as engineering-grade — no italic, no decorative weight, no tracking flourish. Headlines are sentence-case; eyebrows are uppercase only when used as the section eyebrow ("WHY BECOME"); buttons are sentence-case.
+The base palette is a warm off-white/charcoal pairing (`{colors.background}` `#FFFFFF` / `{colors.foreground}` `#2B2926`) with a declared but sparingly-used warm accent set (cream, terracotta, blush) sitting alongside it — in practice, almost every surface in the shipped UI reaches for plain neutral grays (`gray-50` through `gray-900`) rather than the terracotta/blush pair, so neutral gray is the working "surface and text" palette and the warm tones are closer to a reserved accent than a load-bearing one. Muted text has a second technique worth naming: several captions set the *foreground* colour at reduced opacity (`text-[#2B2926]/50`) instead of switching to a separate gray token — the same ink, quieter, rather than a different ink.
 
-The single shape signature is the pill. Every interactive element rounds to `{rounded.pill}` 999 px — primary CTA, secondary CTA, subtle gray pill, white floating pill, category chip, app-download badge. Cards and surfaces round to `{rounded.xl}` 16 px; the larger "Go Get 2026" annual-showcase card uses the same 16 px shape, just at scale. The tab-toggle on the hero ride-request form uses an off-shape `{rounded.pill-tab}` 36 px — barely-pill, deliberately tighter than the canonical 999 px pill.
+Dark mode is a full second palette, not just an inverted one: near-black surfaces (`{colors.dark-bg-base}` → `{colors.dark-bg-active}`, each a shade lighter, for base/surface/card/hover/active elevation) and — distinctively — RapidKL's icon colour flips from maroon to sage green (`{colors.dark-route-rapidkl}` `#9CAF88`) while MRT Feeder flips from slate to near-white (`{colors.dark-route-feeder}` `#F0F2F3`), because the light-mode maroon reads as an alert colour on black. The category-colour *contract* — two categories, two consistent colours — holds in both themes; the actual hex values don't.
 
-**Key Characteristics:**
-- A two-colour CTA hierarchy: black `{colors.primary}` pill for primary conversion targets; white `{colors.canvas}` pill (sometimes with a soft drop shadow) for secondary; subtle gray `{colors.canvas-soft}` pill for tertiary or chip variants.
-- The pill is the single signature shape — `{rounded.pill}` 999 px on every interactive element except the tab-toggle (`{rounded.pill-tab}` 36 px) and the larger product cards (`{rounded.xl}` 16 px).
-- Every headline is sentence-case in `{typography.display-xl}` / `{typography.display-xxl}` weight 700; no all-caps display.
-- Editorial 4:3 illustrations of riders / drivers / cars are the only consistent decorative system; no gradients, no atmospheric backdrops, no shadows that aren't card-elevation hints.
-- A signature alternating-band rhythm: white feature card → black promo card (with white text and white CTA) → white feature card → black footer. The black bands are NOT hero-only; they appear mid-page as promo callouts.
-- A signature ride-request form card on the hero: pickup pin input + destination input + date/time chip + black "See prices" pill, all stacked inside a `{rounded.xl}` shadowed card.
+**Key characteristics:**
+- Two category colours and nothing else: RapidKL maroon (light) / sage (dark), MRT Feeder slate (light) / near-white (dark). No other status or brand colour competes with them — red/orange/yellow are reserved for genuine errors (`{colors.danger-*}`), never for a route.
+- Every floating control is a pill (`{rounded.pill}`): the search bar, the dark-mode toggle, the cancel button, the drag handle, every direction/route badge.
+- Every data surface is `{rounded.xl}` (16px): ETA rows, route cards, search-result rows. Larger *containers* of those surfaces — the search overlay panel, the bottom sheet's top corners — step up one size to `{rounded.2xl}` (24px). Nothing in the system uses a small rounded-md/lg corner as a primary shape; small radii only appear on nested inner elements (icon chips, small pills already covered by `{rounded.pill}`).
+- One true structural signature: the same panel is a **bottom sheet on mobile** (slides up from the bottom, rounded top corners, drag handle, swipe-to-dismiss) and a **fixed left sidebar on desktop** (slides in from the left, square corners, full height, no dismiss gesture) — one component, two anchor points, switched at the `md` (768px) breakpoint.
+- Cards lift on hover/press: `shadow-sm` at rest, `shadow-xl` + `scale-[1.01]` on hover, `scale-[0.99]` on active — a tactile press response on every clickable result row.
+- Section labels are small, bold, uppercase, tracked, and muted (`{typography.eyebrow}`) — "ROUTES", "STOPS", a direction group name — never a bordered tab or a colour block.
 
 ## Colors
 
-### Brand & Accent
-- **Ink Black** (`{colors.primary}` — `#000000`): The brand's only conversion colour. Every primary CTA pill, the footer fill, every dark promo band, every nav login button. The system has no secondary accent.
-- **Surface Pressed** (`{colors.surface-pressed}` — `#e2e2e2`): The pressed-state fill for white pills — a soft grey that's used only in active / pressed states.
-- **Black Elevated** (`{colors.black-elevated}` — `#282828`): A near-black used on hover for the translucent white tab-toggle pill. Documented as a system colour because it appears on a recurring brand control.
+### Route / Category
+- **RapidKL** (`{colors.route-rapidkl}` `#880808` light / `{colors.dark-route-rapidkl}` `#9CAF88` dark): every RapidKL bus icon, route badge, and marker. The system's only "loud" colour in light mode.
+- **MRT Feeder** (`{colors.route-feeder}` `#5e6673` light / `{colors.dark-route-feeder}` `#F0F2F3` dark): every feeder shuttle icon, badge, and marker. Quiet and desaturated in both themes — feeder service is the secondary network.
+- **Teal** (`{colors.dark-accent-teal}` `#4A8B8B`, dark mode only): the "inbound" direction pill when it needs to read differently from the sage "outbound" — the one place a third hue appears, and only in dark mode, only as a low-opacity tint.
 
-### Surface
-- **Canvas** (`{colors.canvas}` — `#ffffff`): The default page background.
-- **Canvas Soft** (`{colors.canvas-soft}` — `#efefef`): The soft gray fill for category chips, form-input rows inside the ride-request card, and subtle pill buttons.
-- **Canvas Softer** (`{colors.canvas-softer}` — `#f3f3f3`): A slightly lighter gray used as a nested-input fill on white surfaces.
+### Surface (light / default)
+- **Background** (`{colors.background}` `#FFFFFF`): the map canvas and page base.
+- **Surface** (`{colors.surface}` `#F9FAFB`, Tailwind gray-50): card and row fill — ETA rows, route-card headers, empty states.
+- **Surface hover** (`{colors.surface-card-hover}` `#F3F4F6`, gray-100): hover fill for cards and icon chips.
+- **Border subtle** (`{colors.border-subtle}` `#F3F4F6`) / **border default** (`{colors.border-default}` `#E5E7EB`): hairline dividers throughout — never more than 1px, never a heavy stroke.
+
+### Surface (dark)
+- **Base → Active** (`{colors.dark-bg-base}` `#0D0F10` → `{colors.dark-bg-surface}` `#141718` → `{colors.dark-bg-elevated}` `#1C1F21` → `{colors.dark-bg-active}` `#212527`): four steps of elevation, each a little lighter — map/page, sidebar/sheet, card, hover/pressed.
+- **Border subtle/card** (`rgba(255,255,255,0.06–0.07)`): hairlines, barely visible — dark mode leans on elevation steps for separation, not borders.
 
 ### Text
-- **Ink** (`{colors.ink}` — `#000000`): Every heading and body paragraph on light surfaces.
-- **Body** (`{colors.body}` — `#5e5e5e`): Secondary text — captions, sub-headings, supporting copy.
-- **Hairline Mid** (`{colors.hairline-mid}` — `#4b4b4b`): A mid-gray used for muted link text inside footer columns and breadcrumb-style nav.
-- **Mute** (`{colors.mute}` — `#afafaf`): The lightest text role — placeholder text, fine print, low-priority metadata.
-- **On Dark** (`{colors.on-dark}` — `#ffffff`): All text on `{colors.ink}` surfaces (footer, dark promo bands).
+- **Primary** (`{colors.text-primary}` `#111827` light / `{colors.dark-text-primary}` `#F0F2F3` dark): titles, primary labels, the ETA number itself.
+- **Secondary** (`{colors.text-secondary}` `#6B7280` light / `{colors.dark-text-secondary}` `#8A9199` dark): captions, "stops away", route long names.
+- **Muted** (`{colors.text-muted}` `#9CA3AF` light / `{colors.dark-text-muted}` `#4A5158` dark): placeholders, section eyebrows, empty-state copy. Light mode sometimes reaches for `foreground` at 50% opacity instead of this token (see Overview) — both read the same, pick whichever the surrounding markup already uses.
 
 ### Semantic
-The brand does not maintain a separate error / success / warning palette in its public marketing surface. Validation cues come from the primary black or from the brand's editorial illustrations. The `#0000ee` link colour is the system's only chromatic — it's the browser-default link blue, appearing in body-copy inline links inside legal / footer text.
+- **Danger** (`{colors.danger-bg}` `#FEF2F2` / `{colors.danger-border}` `#FEE2E2` / `{colors.danger-text}` `#DC2626`): the *only* other colour role in the system, reserved for a genuine failure ("Failed to load ETAs", "Failed to load stops"). Never used for a route, a badge, or a warning that isn't an actual error.
+- **Reserved, underused**: `{colors.cream}` `#F5EDE3`, `{colors.terracotta}` `#C2805F`, `{colors.blush}` `#EDD5BE` are declared as CSS variables but rarely reached for over plain gray in the components that ship — documented for completeness, not a licence to sprinkle them in.
 
 ## Typography
 
 ### Font Family
-Two custom faces carry the entire system:
-
-1. **A custom geometric display sans** (extracted as `UberMove`) for every headline. Weight 700 only; no italic; no tracking variation. Sizes range from `display-sm` 20 px up to `display-xxl` 52 px on the hero. Line-heights tighten to 1.22 – 1.25 at display sizes for a poured-on-the-page look.
-2. **A custom text sans** (extracted as `UberMoveText`) for body, button, link, and small headings. Weights 400 and 500 are the working pair. Used at 12 – 18 px; 24 px maximum for ride-request form labels. Tracking is always neutral.
-
-The two faces share a family DNA but never overlap roles — the display face never carries a body paragraph; the text face never carries a hero headline.
+**Geist** for everything — one face, no separate display/text split the way a marketing system needs. Weights 400 (regular captions), 500 (body/labels), 700 (titles, eyebrows, the ETA number) cover the whole system. **Geist Mono** ships alongside it but isn't visibly used in any component read for this system — available, not load-bearing.
 
 ### Hierarchy
 
-| Token | Size | Weight | Line Height | Use |
-|---|---|---|---|---|
-| `{typography.display-xxl}` | 52px | 700 | 64px | Hero headline ("Go anywhere with Uber", "Drive when you want"). |
-| `{typography.display-xl}` | 36px | 700 | 44px | Page section headlines ("Plan for later", "Safety, simplified"). |
-| `{typography.display-lg}` | 32px | 700 | 40px | Promo-card headlines. |
-| `{typography.display-md}` | 24px | 700 | 32px | Card titles, illustrated-promo headlines. |
-| `{typography.display-sm}` | 20px | 700 | 28px | Sub-card headings. |
-| `{typography.body-lg}` | 18px | 500 | 24px | Lead paragraphs and larger body. |
-| `{typography.body-md}` | 16px | 400 | 24px | Default paragraph body. |
-| `{typography.body-md-strong}` | 16px | 500 | 20px | Bolded inline body and most button labels. |
-| `{typography.body-sm}` | 14px | 400 | 20px | Captions, secondary metadata. |
-| `{typography.body-sm-strong}` | 14px | 500 | 16px | Bold caption / chip labels. |
-| `{typography.caption}` | 12px | 400 | 20px | Fine print, footer secondary lines. |
-| `{typography.button-large}` | 18px | 500 | 24px | Large rounded buttons inside the ride-request form. |
-| `{typography.button-md}` | 16px | 500 | 20px | Default button label. |
+| Token | Size | Weight | Use |
+|---|---|---|---|
+| `{typography.title-lg}` | 20px | 700 | Stop/route panel title ("KL Sentral", route number + name). |
+| `{typography.title-md}` | 16px | 700 | Search-result row title, route-card header name. |
+| `{typography.body-md}` | 14px | 500 | Stop-row labels, selected-state emphasis. |
+| `{typography.body-md-regular}` | 14px | 400 | Default body copy. |
+| `{typography.eta-number}` | 16px | 700 | The live ETA readout — always the heaviest, right-aligned number in its row. |
+| `{typography.caption}` | 12px | 400 | "Stop ID: …", route long names, direction captions. |
+| `{typography.eyebrow}` | 12px | 700 | Section labels — uppercase, tracked wide. |
 
 ### Principles
-- **Sentence-case is the voice.** No all-caps headlines. Eyebrow tags ("WHY BECOME") are the rare exception.
-- **Weight 700 is for headlines; weight 500 is for buttons and emphasis.** Don't promote button labels to 700.
-- **No tracking flourish.** The display face is never letter-spaced, positive or negative.
-- **Two faces, two roles.** UberMove for display; UberMoveText for everything else. Never cross the streams.
+- **One face, weight does the work.** No secondary display font; hierarchy comes from size + the 400/500/700 weight steps, not a typeface switch.
+- **The ETA number is always the loudest thing in its row** — bold, primary text colour, right-aligned, nothing competes with it for attention inside a card.
+- **Eyebrows are the only uppercase text in the system.** Titles and body copy are always sentence case.
 
 ### Note on Font Substitutes
-The two faces are proprietary. Open-source substitutes:
-- **Display sans** — *Inter* weight 700 with `font-feature-settings: "ss01"` enabled comes closest. *Geist* weight 700 is the second-best option.
-- **Text sans** — *Inter* weights 400 / 500 match the geometric width and x-height. *Plus Jakarta Sans* is a softer alternative if the brand wants a less neutral feel.
+Geist is open-source (SIL license) and free to use directly — no substitution needed. Load via a Google Fonts / self-hosted `@font-face` equivalent (`Geist` isn't on Google Fonts; use the official `geist` npm/CDN distribution or fall back to `system-ui` if unavailable, which is close in x-height and neutrality).
 
 ## Layout
 
 ### Spacing System
-- **Base unit**: 4 px. Most captured values are multiples of 4 with a few 6-px sub-multiples (10, 14) inside button padding.
-- **Tokens**: `{spacing.xxs}` 4 px · `{spacing.xs}` 6 px · `{spacing.sm}` 8 px · `{spacing.md}` 12 px · `{spacing.lg}` 16 px · `{spacing.xl}` 20 px · `{spacing.2xl}` 24 px · `{spacing.3xl}` 32 px.
-- **Section padding**: marketing bands sit at `{spacing.3xl}` 32 px top/bottom on tighter pages and `{spacing.3xl} {spacing.3xl}` for hero bands; promo cards inset at `{spacing.2xl}` 24 px.
-- **Card interior padding**: content cards sit at `{spacing.2xl}` 24 px; the ride-request form uses `{spacing.lg}` 16 px to keep the form compact.
-- **Inline gap**: button rows, category chip rows, app-store pill rows use `{spacing.md}` 12 px between siblings.
+- **Base unit**: 4px. Tokens: `{spacing.xxs}` 4px · `{spacing.xs}` 6px · `{spacing.sm}` 8px · `{spacing.md}` 12px · `{spacing.lg}` 16px · `{spacing.xl}` 20px · `{spacing.2xl}` 24px.
+- **Card padding**: `{spacing.lg}` 16px is the standard card/row inset (`p-4`); the search overlay panel steps up to `{spacing.xl}` 20px (`p-5`).
+- **List rhythm**: `{spacing.sm}`–`{spacing.md}` (8–12px) between stacked rows (`space-y-2`/`space-y-3`); `{spacing.2xl}` 24px between distinct sections (routes vs. stops).
+- **Icon-to-label gap**: `{spacing.sm}`–`{spacing.md}` (a `mr-2`/`mr-3`/`mr-4` icon chip sits left of every title).
 
 ### Grid & Container
-- **Max width**: ~1200 px container; centred with horizontal gutters of `{spacing.3xl}` 32 px on desktop, `{spacing.lg}` 16 px on mobile.
-- **Column patterns**:
-  - Promo-card rows: 2-up at desktop (image left + content right, alternating sides), 1-up at mobile.
-  - Category chips: horizontal flex with wrap.
-  - FAQ rows: full-width single-column.
-  - App-download pills: 2-up at desktop (Rider + Driver), 1-up at mobile.
+- No marketing grid — this is an app shell. Content width is capped only where it floats over the map: the search bar and its results panel cap at `max-w-md` (~448px), centred, with `{spacing.md}`–`{spacing.lg}` side gutters.
+- The sidebar/sheet panel is full-width on mobile, a fixed 400px column on desktop.
 
 ### Whitespace Philosophy
-Card-to-card spacing carries the rhythm — between two stacked promo cards there's roughly a full `{spacing.3xl}` 32 px gutter; inside a card the headline / paragraph / CTA stack is tight (`{spacing.sm}` 8 px between siblings). The black promo bands and the footer have no internal hairlines — content sits on flat ink with white text.
+Cards touch their neighbours closely (8–12px) inside one list, but a full `{spacing.2xl}` 24px separates one semantic group from the next (a route's stop list vs. its own header, "Routes" results vs. "Stops" results). The map itself carries no internal whitespace rules — it's the one element in the system that's allowed to be edge-to-edge with nothing floating "in" it, only "over" it.
 
 ### Responsive Strategy
 
 #### Breakpoints
-
-| Name | Width | Key Changes |
+| Name | Width | Key change |
 |---|---|---|
-| Mobile | < 600px | Nav collapses to hamburger; promo cards stack; ride-request form becomes full-width. |
-| Mobile-Large | 600–767px | Same as Mobile; chip rows enable horizontal scroll. |
-| Tablet | 768–1119px | 2-up promo grid at upper widths; nav stays horizontal until ≥ 1120 px. |
-| Desktop | 1120–1135px | Full nav row visible; promo cards 2-up. |
-| Desktop-Large | ≥ 1136px | Container caps at ~1200 px; bands stay edge-to-edge while content centres. |
+| Mobile | < 768px | Panel is a bottom sheet: slides up, rounded top corners, drag handle, swipe down (>100px) to dismiss. |
+| Desktop | ≥ 768px | Panel is a fixed left sidebar: slides in from the left, square corners, full viewport height, no drag/dismiss gesture — a visible close (×) button instead. |
 
 #### Touch Targets
-The pill `button-primary` renders at ~44 px tall (10 px vertical padding + 24 px label line-height); the larger `button-large-rounded` at ~56 px. Both meet WCAG AAA at all breakpoints. Category chips inflate to ≥ 44 px tall through extra padding on touch viewports.
+Icon-pill buttons (dark-mode toggle, cancel, close) run ~40–44px including padding — comfortable for a thumb over a map. The drag handle itself is a generous 48×6px bar with a large invisible touch-catch area around it (`pt-4 pb-2` on the whole handle row), not just the visible pill.
 
 #### Collapsing Strategy
-- **Nav**: full link row + Help / Log in / Sign up pills at desktop. Collapses to logo + hamburger at mobile; menu overlays full-screen with the same link list stacked.
-- **Ride-request form card**: at desktop, the form sits inside a max-490-px `{rounded.xl}` card with shadow. At mobile, full-width with edge-to-edge.
-- **Promo cards**: at desktop, image-left + content-right (or alternating). At mobile, image always above content.
-- **Annual showcase card**: scales from a 2:3 desktop frame to a 4:3 mobile frame; date text resizes proportionally.
+- **Search**: same floating pill at every width; only the results panel width caps out at `max-w-md`.
+- **Panel (the signature)**: see Breakpoints above — this is the one component that doesn't just reflow, it changes anchor edge and animation axis (`y` on mobile, `x` on desktop) entirely.
+- **Route/stop cards**: identical markup at every width; they simply have more room to breathe inside the wider desktop sidebar.
 
-#### Image Behavior
-- **Editorial illustrations**: 4:3 or 16:9 hard-edge rectangles; never cropped to a circle, never tilted. Aspect preserved.
-- **Photography**: same — square or landscape; framed inside `{rounded.xl}` card chrome.
-- **Maps in ride-request flow**: full-bleed inside a card; rounded corners follow the parent card.
-- **Logo bar**: SVG vector, monochrome, consistent height.
+#### Marker / Icon Behavior
+- **Route & stop icons**: `lucide-react` line icons (Bus, MapPin, RouteIcon, Search, X, Moon/Sun), always inside a `{rounded.pill}` chip, coloured by category where the icon *is* the category signal (route/stop markers), neutral gray where it's chrome (search icon, close button).
+- **No photography or illustration system** — this app has none, live data and the map itself carry all the visual interest.
 
 ## Elevation & Depth
 
 | Level | Treatment | Use |
 |---|---|---|
-| Level 0 — Flat | No shadow, no border. | Default — most cards and surfaces lean on hairline-of-canvas contrast. |
-| Level 1 — Subtle Drop | `rgba(0, 0, 0, 0.12) 0px 4px 16px 0px` | Card-elevated frames around promo cards on light bands. |
-| Level 2 — Card Drop | `rgba(0, 0, 0, 0.16) 0px 4px 16px 0px` | The ride-request form card on the hero; large content cards with embedded forms. |
-| Level 3 — Pill Float | `rgba(0, 0, 0, 0.16) 0px 2px 8px 0px` | The floating white pill button (the one that floats over hero photography). |
+| Flat | No shadow | Default row/card background — rely on the gray-50-on-white contrast, not a shadow, for separation. |
+| `{shadow.sm}` | Subtle | Resting state of interactive result cards. |
+| `{shadow.md}` | Floating chrome | The search pill and its icon-pill siblings, floating over the map. |
+| `{shadow.xl}` | Hover lift | Interactive cards on hover, paired with `scale-[1.01]`. |
+| `{shadow.2xl}` | Overlay | The full-screen blurred search-results panel. |
+| `{shadow.sheet-mobile}` / `{shadow.sheet-desktop}` | Directional | The sheet/sidebar's one hand-tuned shadow — cast upward off the top edge on mobile, cast sideways off the right edge on desktop, matching whichever edge it's anchored to. |
 
 ### Decorative Depth
-- **Black bands as polarity-flip depth**: the brand uses pure black `{colors.primary}` mid-page bands to break the white-on-white rhythm. The polarity shift IS the depth cue.
-- **Editorial illustrations as in-card depth**: every promo card has a single 4:3 illustration as its left or right column. The illustration's visual weight is part of the card's elevation read.
-- **Pill geometry as micro-depth**: `{rounded.pill}` 999 px applied at varying button heights creates a stack of nested pills that reads as visual hierarchy.
+- **Press feedback as depth**: `scale-[1.01]` on hover, `scale-[0.99]` on active — the card physically responds to touch, which reads as "depth" more than any shadow does.
+- **Blur as a scrim, not a card effect**: the full-screen search overlay uses `backdrop-blur-md`/`-2xl` over a darkened map, not a drop shadow, to separate the overlay from the content beneath it.
 
 ## Shapes
 
 ### Border Radius Scale
-
 | Token | Value | Use |
 |---|---|---|
-| `{rounded.none}` | 0px | Full-bleed hero bands, footer fill, raw image edges. |
-| `{rounded.md}` | 8px | Form-input fields inside the ride-request card. |
-| `{rounded.lg}` | 12px | Smaller secondary card chrome. |
-| `{rounded.xl}` | 16px | Canonical card radius — promo cards, content cards, ride-request form card, annual-showcase card, large rounded buttons. |
-| `{rounded.pill}` | 999px | The brand's signature interactive shape — every pill button, category chip, app-download pill, icon button. |
-| `{rounded.pill-tab}` | 36px | The translucent-white tab-toggle pill on the hero (Ride / Drive). |
-| `{rounded.full}` | 9999px | Identical effect to `{rounded.pill}` for circular icon containers. |
+| `{rounded.none}` | 0px | Desktop sidebar (deliberately square against the map edge). |
+| `{rounded.md}` | 8px | Not used as a primary shape — reserved, avoid introducing it as a new "medium" card radius. |
+| `{rounded.lg}` | 12px | Not used as a primary shape either; same note. |
+| `{rounded.xl}` | 16px | **Canonical data-surface radius** — every ETA row, route card, search-result row. |
+| `{rounded.2xl}` | 24px | **Canonical container radius** — the search overlay panel, the mobile sheet's top corners. |
+| `{rounded.pill}` | 9999px | **Canonical control radius** — search bar, icon buttons, all badges, the drag handle. |
 
-### Photography Geometry
-- **Editorial illustrations**: 4:3 landscape inside promo cards; 16:9 for full-width showcase frames.
-- **Driver / rider portraits**: 4:5 portrait crop; framed by `{rounded.xl}` 16 px card chrome.
-- **Annual showcase image**: 2:3 portrait at desktop, scaling to 4:3 at mobile. The image fills the card; the headline overlays the bottom.
-- **Logo bar**: monochrome SVG vectors at consistent ~24 px height.
-- **Avatars** (where used): square or `{rounded.full}` circle, never `{rounded.lg}` rounded-square.
+### Icon & Marker Geometry
+- Icons sit inside a round chip (`{rounded.pill}`), never a squared or rounded-square container.
+- A route/stop's category colour is carried by the *icon glyph colour* inside a neutral chip, not by the chip's background — the chip is always the same neutral gray at every level; only the glyph changes hue.
 
 ## Components
 
-### Buttons
+### Controls
+**`search-pill`** — the persistent search input.
+- Background `{colors.background}`, text `{colors.text-primary}`, `{typography.body-md}`, rounded `{rounded.pill}`, padding `{spacing.sm} {spacing.lg}`, `{shadow.md}`, 1px `{colors.border-default}`.
 
-**`button-primary`** — the canonical black pill, the brand's conversion target.
-- Background `{colors.primary}`, text `{colors.on-primary}`, label set in `{typography.button-md}`, padding `{spacing.md} {spacing.md}`, shape `{rounded.pill}` 999 px.
+**`icon-pill-button`** — dark-mode toggle, cancel, and similar single-purpose floating buttons.
+- Background `{colors.background}`, text `{colors.text-secondary}`, rounded `{rounded.pill}`, padding `{spacing.sm}`, `{shadow.md}`, 1px `{colors.border-default}`. Hover fills `{colors.surface-card-hover}`.
 
-**`button-secondary`** — the white pill paired with the black primary.
-- Background `{colors.canvas}`, text `{colors.ink}`, same label and padding as `button-primary`, shape `{rounded.pill}`.
+**`icon-chip`** — the round neutral container that every category/action icon sits inside.
+- Background `{colors.surface-card-hover}`, rounded `{rounded.pill}`, padding `{spacing.xs} {spacing.sm}`. The icon glyph itself carries the category colour, not the chip.
 
-**`button-subtle`** — the gray secondary pill used for tertiary actions inside cards (e.g., "Learn more" / "Use Reserve").
-- Background `{colors.canvas-soft}` (`#efefef`), text `{colors.ink}`, label in `{typography.button-md}`, padding `{spacing.md} {spacing.lg}`, shape `{rounded.pill}`.
+### Data Surfaces
+**`result-card`** — a search-result row (route or stop).
+- Background `rgba(255,255,255,0.7)` over the panel's own translucent surface, text `{colors.foreground}`, rounded `{rounded.xl}`, padding `{spacing.lg}`, 1px `{colors.border-subtle}`, `{shadow.sm}` resting → `{shadow.xl}` + `scale-[1.01]` on hover, `scale-[0.99]` on active.
 
-**`button-floating`** — the white pill with a subtle drop-shadow that floats over a dark or photographic surface.
-- Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.md}`, shape `{rounded.pill}`. Carries a Level 3 pill-float shadow.
+**`eta-row`** — one live bus entry inside an ETA list.
+- Background `{colors.surface}`, text `{colors.text-primary}`, rounded `{rounded.xl}`, padding `{spacing.md}`, 1px `{colors.border-default}`. Contents: icon chip → primary label (flex-1) → `{typography.eta-number}` right-aligned, never wrapped.
 
-**`button-large-rounded`** — the bigger black call-to-action used inside the ride-request flow ("Yes, help me").
-- Background `{colors.primary}`, text `{colors.on-primary}`, label in `{typography.button-large}`, padding `{spacing.lg} {spacing.xl}`, shape `{rounded.xl}` 16 px (not pill — the only black CTA that breaks the pill rule, used in the larger form context).
+**`route-badge`** — a route's short code/name, coloured by category.
+- Rounded `{rounded.pill}`, padding `2px {spacing.sm}`, `{typography.caption}`. Icon or text tinted `{colors.route-rapidkl}`/`{colors.route-feeder}` per category (or the dark-mode pair).
 
-**`button-tab-translucent`** — the tab-toggle on the hero ride-request form (Ride / Drive).
-- Background `{colors.canvas}`, text `{colors.ink}`, label in `{typography.body-md-strong}`, shape `{rounded.pill-tab}` 36 px (off-shape, deliberately tighter than the canonical 999 px pill).
+**`direction-pill`** — "Out" / "In" tags on a route-serving-a-stop card.
+- Rounded `{rounded.pill}`, padding `2px {spacing.sm}`, `{typography.caption}`, background a ~12–15% tint of the route colour (or, dark mode, sage for outbound / teal `{colors.dark-accent-teal}` for inbound).
 
-### Cards & Containers
+**`panel-overlay`** — the full-screen search-results container.
+- Background `rgba(255,255,255,0.9)` + backdrop blur, rounded `{rounded.2xl}`, padding `{spacing.xl}`, `{shadow.2xl}`, 1px `{colors.border-default}`.
 
-**`card-content`** — the canonical content card.
-- Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.2xl}`, shape `{rounded.xl}` 16 px. No shadow on the default state.
+**`error-banner`** — a failed-fetch state.
+- Background `{colors.danger-bg}`, text `{colors.danger-text}`, 1px `{colors.danger-border}`, rounded `{rounded.xl}`, padding `{spacing.lg}`, centred caption text. The only place danger red appears.
 
-**`card-elevated`** — the content card with Level 1 subtle drop.
-- Background `{colors.canvas}`, text `{colors.ink}`, same padding + shape as `card-content`. Shadow at Level 1.
+### Signature Component
+**`sheet-mobile`** / **`sheet-desktop`** — one panel, two forms, switched at 768px.
+- Mobile: background `{colors.background}`, rounded `{rounded.2xl} {rounded.2xl} 0 0` (top corners only), `{shadow.sheet-mobile}`, slides up from `y: 100%`, drag handle, swipe down >100px to dismiss.
+- Desktop: background `{colors.background}`, rounded `{rounded.none}`, `{shadow.sheet-desktop}`, fixed 400px left column, slides in from `x: -100%`, explicit close button instead of a dismiss gesture.
+- Both: spring transition (damping 25, stiffness 200), same content markup inside either shell.
 
-**`card-soft-tinted`** — the gray-tinted card used as a sub-region inside the page (e.g., "Plan for later" callout).
-- Background `{colors.canvas-soft}`, text `{colors.ink}`, padding `{spacing.2xl}`, shape `{rounded.xl}`.
-
-**`promo-card-illustrated`** — the 2-column promo card with illustration on one side and copy on the other.
-- Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.2xl}`, shape `{rounded.xl}`. Headline in `{typography.display-md}` or larger.
-
-**`promo-card-on-dark`** — the polarity-flipped promo card in black.
-- Background `{colors.ink}`, text `{colors.on-dark}`, padding `{spacing.2xl}`, shape `{rounded.xl}`. Used for the "Drive with Uber" mid-page band.
-
-**`request-form-card`** — the hero ride-request form chrome.
-- Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.lg}`, shape `{rounded.xl}`. Carries Level 2 card drop shadow.
-
-**`request-form-input-row`** — the per-field row inside the request-form card.
-- Background `{colors.canvas-soft}`, text `{colors.ink}`, padding `{spacing.lg}`, shape `{rounded.md}` 8 px. Hosts an icon + label + value.
-
-**`showcase-image-card`** — the giant "GO•GET 2026" annual showcase card.
-- Background `{colors.ink}`, text `{colors.on-dark}` overlay, padding `{spacing.3xl}`, shape `{rounded.xl}`. Display-xxl headline overlays the bottom of the image.
-
-### Inputs & Forms
-
-**`text-input`** — the canonical text input.
-- Background `{colors.canvas-soft}`, text `{colors.ink}`, body in `{typography.body-md}`, padding `{spacing.lg}`, shape `{rounded.md}` 8 px.
-
-**`text-input-on-soft`** — the nested input on a white card (slightly lighter fill).
-- Background `{colors.canvas-softer}`, otherwise identical to `text-input`.
-
-### Navigation
-
-**`nav-bar`** — the sticky top nav.
-- Background `{colors.canvas}` on light pages, switches to `{colors.ink}` on the rare dark page (e.g., Uber Eats hero). Padding `{spacing.lg} {spacing.3xl}`.
-
-**`nav-link`** — the link row inside `nav-bar`.
-- Text `{colors.ink}`, set in `{typography.body-md-strong}` 500 weight.
-
-**`footer`** — the deep-black footer band.
-- Background `{colors.primary}` (the brand's only true black surface), text `{colors.on-dark}`, padding `{spacing.3xl} {spacing.3xl}`. Body in `{typography.body-sm}`; column eyebrows in `{typography.body-md-strong}`.
-
-### Signature Components
-
-**`hero-band-light`** — the white hero with the ride-request card.
-- Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.3xl} {spacing.3xl}`. Headline in `{typography.display-xxl}` (52 px / 700) on the left; `request-form-card` on the right.
-
-**`hero-band-dark`** — the rare black hero (used on Uber Eats and Drive landing).
-- Background `{colors.ink}`, text `{colors.on-dark}`, padding `{spacing.3xl} {spacing.3xl}`. Same display-xxl headline scale; CTA inverts to `button-secondary` white pill.
-
-**`category-button`** — the horizontal-scroll category row ("Reserve / Rentals / Teens / Group rides").
-- Background `{colors.canvas-soft}`, text `{colors.ink}`, label in `{typography.body-sm-strong}`, padding `{spacing.sm} {spacing.lg}`, shape `{rounded.pill}`. An icon precedes the label.
-
-**`faq-row`** — the FAQ accordion item.
-- Background `{colors.canvas}`, text `{colors.ink}`, question in `{typography.body-md-strong}`, padding `{spacing.lg}` 0. No card chrome — hairline dividers between rows.
-
-**`app-download-pill`** — the "Download the Rider app" / "Download the Driver app" pill.
-- Background `{colors.ink}`, text `{colors.on-dark}`, label in `{typography.body-md-strong}`, padding `{spacing.md} {spacing.xl}`, shape `{rounded.pill}`.
-
-**`icon-button-circular`** — the round icon container used in the nav and inside the ride-request card.
-- Background `{colors.canvas-soft}`, dark icon, shape `{rounded.full}`. No label.
-
-### Links
-
-**`link-blue`** — the system-default browser-blue link inside legal / footer fine print.
-- Text `{colors.link}` (`#0000ee`), body in `{typography.body-md}`.
-
-**`link-on-dark`** — the white link inside dark bands.
-- Text `{colors.on-dark}`, body in `{typography.body-md}`.
-
-**`link-mute`** — the muted gray link inside footer columns.
-- Text `{colors.hairline-mid}`, body in `{typography.body-md}`.
-
-**`link-mute-soft`** — the lightest gray link, used for low-priority secondary text on dark surfaces.
-- Text `{colors.mute}`, body in `{typography.body-md}`.
-
-### Examples (illustrative)
-
-> Auto-derived kit-mirror demonstration surfaces (`scripts/derive-examples-block.mjs`). Each `ex-*` entry references brand-native primitives so downstream consumers (`/preview-design`, `/generate-kit`) re-skin the same 10 surfaces consistently. `TO_FILL` markers indicate missing primitives — resolve in the LLM judgment pass.
-
-**`ex-pricing-tier`** — Default Pricing tier card. Re-uses feature-card chrome with brand canvas-soft surface.
-- Properties: `backgroundColor`, `textColor`, `borderColor`, `rounded`, `padding`
-
-**`ex-pricing-tier-featured`** — Featured/highlighted tier — polarity-flipped surface (dark fill + light text in light mode, light fill + dark text in dark mode).
-- Properties: `backgroundColor`, `textColor`, `rounded`, `padding`
-
-**`ex-product-selector`** — What's Included summary card — re-purposed for SaaS / B2B verticals (NOT a literal product gallery).
-- Properties: `backgroundColor`, `rounded`, `padding`
-
-**`ex-cart-drawer`** — Subscription summary — re-purposed for SaaS / B2B (line items per add-on, not literal cart).
-- Properties: `backgroundColor`, `rounded`, `padding`, `item-divider`
-
-**`ex-app-shell-row`** — Sidebar nav row inside the App Shell example. Active state uses brand primary as the indicator.
-- Properties: `backgroundColor`, `activeIndicator`, `rounded`, `padding`
-
-**`ex-data-table-cell`** — Default data-table th + td chrome. Header uses mono-caps eyebrow typography; body uses body-sm.
-- Properties: `headerBackground`, `headerTypography`, `bodyTypography`, `cellPadding`, `rowBorder`
-
-**`ex-auth-form-card`** — Sign-in / sign-up card. Re-uses feature-card chrome with text-input primitives inside.
-- Properties: `backgroundColor`, `rounded`, `padding`
-
-**`ex-modal-card`** — Modal dialog surface — same chrome as feature-card with elevated shadow.
-- Properties: `backgroundColor`, `rounded`, `padding`
-
-**`ex-empty-state-card`** — Empty-state illustration frame.
-- Properties: `backgroundColor`, `rounded`, `padding`, `captionTypography`
-
-**`ex-toast`** — Toast notification surface — feature-card shape + medium shadow.
-- Properties: `backgroundColor`, `rounded`, `padding`, `typography`
-
+### Navigation / Labels
+**`section-eyebrow`** — "ROUTES", "STOPS", a direction-group heading.
+- Text `{colors.text-muted}`, `{typography.eyebrow}` (uppercase, wide tracking), no background, no border.
 
 ## Do's and Don'ts
 
 ### Do
-- Reserve `{colors.primary}` (`#000000`) for every primary CTA pill. One black pill per visible viewport is the brand's whole conversion story.
-- Use `{rounded.pill}` 999 px on every interactive element (buttons, chips, app pills). The pill IS the brand's geometric signature.
-- Render cards in `{rounded.xl}` 16 px — promo cards, content cards, the ride-request form card, the annual-showcase card all share this radius.
-- Set every headline in `{typography.display-*}` weight 700 in sentence-case. The display face never carries body copy.
-- Use polarity-flipped black promo bands mid-page to break up white-on-white rhythm. The polarity shift IS the depth cue.
-- Anchor every promo card with a 4:3 editorial illustration; never use generic stock imagery.
+- Colour every route/stop icon by category — RapidKL maroon (or dark-mode sage), MRT Feeder slate (or dark-mode near-white) — and nowhere else in the palette.
+- Use `{rounded.pill}` for every control and badge, `{rounded.xl}` for every data card, `{rounded.2xl}` only for a *container* of cards (the overlay panel, the sheet's outer corners).
+- Right-align the ETA number in `{typography.eta-number}`, bold, primary text colour, as the loudest element in its row.
+- Give interactive cards a hover lift (`{shadow.xl}` + `scale-[1.01]`) and a press-down (`scale-[0.99]`) — the tactile response *is* the depth cue, not a heavier shadow.
+- Keep the sheet/sidebar as one component with two anchor states, not two separately-designed panels that happen to show the same data.
 
 ### Don't
-- Don't introduce a second brand accent colour (orange, blue, green). The brand's entire UI is black-and-white plus grayscale; new accents flatten the system.
-- Don't render the primary CTA as a `{rounded.xl}` rectangle except inside the larger ride-request flow (where `button-large-rounded` is the documented exception).
-- Don't use all-caps display headlines. Sentence-case is the voice; uppercase is restricted to rare eyebrow tags.
-- Don't drop a soft drop-shadow on every card. The brand uses Level 0 flat as the default; shadow is reserved for the floating pill and the ride-request form.
-- Don't reduce the brand to its illustration system alone. The pill geometry + black/white duet carries the brand even without illustrations.
-- Don't tighten or loosen letter-spacing on the display face. The brand never letter-spaces; default tracking is part of the voice.
-- Don't use `{rounded.full}` 9999 px for square cards — the pill 999 px and full 9999 px effects are identical for interactive elements, but cards stay at `{rounded.xl}` 16 px.
+- Don't introduce a third "status" colour — route category and genuine error (`{colors.danger-*}`) are the only two colour roles that exist; a warning state reuses neutral gray + copy, not a new hue.
+- Don't put a route's category colour on a chip's *background* — the chip is always neutral; only the icon glyph or badge text carries the colour.
+- Don't reach for `{rounded.md}`/`{rounded.lg}` (8–12px) as a primary card shape — those sizes aren't part of this system's working vocabulary even though the token exists; every real card is `{rounded.xl}` or bigger.
+- Don't give the desktop sidebar rounded corners or a top/bottom shadow — square, full-height, side-shadow only, deliberately flush against the map.
+- Don't reach for the cream/terracotta/blush trio by default — they're declared, not the working palette; plain neutral gray is what actually ships.

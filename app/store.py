@@ -30,13 +30,13 @@ def log_event(path: str, request_body: bytes, response_body: bytes) -> None:
     })
 
 
-def log_alert_event(message: str) -> None:
+def log_alert_event(message: str, category: str | None = None) -> None:
     _events.append({
         "seq": len(_events) + 1,
         "tool": "arrival_alert",
         "alert": True,
         "arguments": {},
-        "result": {"ok": True, "message": message},
+        "result": {"ok": True, "message": message, "category": category},
         "at": datetime.now().strftime("%H:%M:%S"),
     })
 
@@ -78,14 +78,14 @@ def check_alerts(get_arrivals) -> None:
         arrivals = get_arrivals(alert["stop_ids"], alert["route_id"])
         if not arrivals:
             continue
-        soonest = min(a["eta_seconds"] for a in arrivals)
-        if soonest <= alert["threshold_minutes"] * 60:
-            minutes = soonest // 60
+        best = min(arrivals, key=lambda a: a["eta_seconds"])
+        if best["eta_seconds"] <= alert["threshold_minutes"] * 60:
+            minutes = best["eta_seconds"] // 60
             message = (
                 f"Route {alert['route_short_name']} is about {minutes} minute{'s' if minutes != 1 else ''} "
                 f"from {alert['stop_name']}."
             )
-            log_alert_event(message)
+            log_alert_event(message, best.get("category"))
             fired.append(alert)
     for alert in fired:
         _alerts.remove(alert)
