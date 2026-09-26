@@ -124,11 +124,6 @@ def api_config() -> dict:
     return {"agent_id": agent_id}
 
 
-@app.get("/api/popular-stops")
-def api_popular_stops() -> dict:
-    return {"stops": gtfs.top_stop_names(12)}
-
-
 @app.get("/api/demo-info")
 def api_demo_info() -> dict:
     """Everything the agent knows, split by where it comes from.

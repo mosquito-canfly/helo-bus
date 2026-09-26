@@ -38,9 +38,6 @@
         --color-route-feeder: var(--color-text-secondary);
         --color-route-rapidkl-tint: var(--color-surface-hover);
         --color-route-feeder-tint: var(--color-surface);
-        --color-danger-bg: #fef2f2;
-        --color-danger-border: #fee2e2;
-        --color-danger-text: #dc2626;
 
         /* typography.* — family */
         --font-sans: "Geist", system-ui, "Helvetica Neue", Arial, sans-serif;
@@ -224,9 +221,9 @@
         animation: pulse 0.9s ease-in-out infinite;
       }
       #status[data-state="error"] {
-        color: var(--color-danger-text);
-        background: var(--color-danger-bg);
-        border-color: var(--color-danger-border);
+        color: var(--color-text-primary);
+        background: var(--color-surface);
+        border-color: var(--color-ink);
       }
 
       @keyframes pulse {
@@ -241,11 +238,17 @@
 
       /* ------------------------------------------------------------- panes */
 
+      /* Conversation is the hero: full-width by default. The tool feed is a
+         secondary "How it works" panel, opened on request (default open on
+         desktop, closed on mobile — see the tools-toggle script). */
       main {
         flex: 1;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+        grid-template-columns: 1fr;
+      }
+      body.tools-open main {
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
       }
 
       .pane {
@@ -257,6 +260,12 @@
       }
       .pane + .pane {
         border-left: 1px solid var(--color-border-subtle);
+      }
+      .pane.tools {
+        display: none;
+      }
+      body.tools-open .pane.tools {
+        display: flex;
       }
 
       .pane-head {
@@ -289,6 +298,53 @@
         font-variant-numeric: tabular-nums;
       }
 
+      /* Listening indicator — a calm four-bar "waveform", not audio-reactive,
+         just a steady tell that the mic is live while a call is connected. */
+      .listening {
+        display: none;
+        align-items: center;
+        gap: 3px;
+        height: 14px;
+        margin-right: auto;
+        margin-left: var(--space-sm);
+      }
+      .listening[data-live="true"] {
+        display: inline-flex;
+      }
+      .listening span {
+        width: 3px;
+        border-radius: var(--radius-pill);
+        background: var(--color-text-secondary);
+        animation: wave 1.1s ease-in-out infinite;
+      }
+      .listening span:nth-child(1) {
+        height: 40%;
+        animation-delay: 0s;
+      }
+      .listening span:nth-child(2) {
+        height: 100%;
+        animation-delay: 0.15s;
+      }
+      .listening span:nth-child(3) {
+        height: 65%;
+        animation-delay: 0.3s;
+      }
+      .listening span:nth-child(4) {
+        height: 85%;
+        animation-delay: 0.45s;
+      }
+      @keyframes wave {
+        0%,
+        100% {
+          transform: scaleY(0.4);
+          opacity: 0.6;
+        }
+        50% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+      }
+
       .scroll {
         flex: 1;
         min-height: 0;
@@ -313,12 +369,81 @@
         margin: 0;
         line-height: 1.6;
       }
-      .empty > p {
-        margin: 0;
-        max-width: 34ch;
+
+      /* Empty-state hero: the first thing a judge sees. Calm, centred,
+         one clear action, three honest examples of what to say. */
+      /* #transcript-empty needs an explicit height for .hero's min-height:
+         100% to mean anything — percentages don't resolve through a plain
+         block ancestor whose own height is auto. */
+      #transcript-empty {
+        height: 100%;
+        display: flex;
       }
-      #popular-stops:not(:empty) {
-        margin-top: var(--space-xl);
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        flex: 1;
+        gap: var(--space-lg);
+        padding: var(--space-2xl) 0;
+      }
+      .hero-title {
+        margin: 0;
+        max-width: 32ch;
+        font-size: var(--type-title-lg-size);
+        font-weight: var(--type-title-lg-weight);
+        line-height: var(--type-title-lg-lh);
+        color: var(--color-text-primary);
+      }
+      .hero-cta {
+        font-family: var(--font-sans);
+        font-size: var(--type-title-lg-size);
+        font-weight: 700;
+        padding: var(--space-md) var(--space-2xl);
+        border-radius: var(--radius-pill);
+        border: 1.5px solid var(--color-ink);
+        background: var(--color-ink);
+        color: #ffffff;
+        cursor: pointer;
+        box-shadow: var(--shadow-md);
+      }
+      .hero-cta:hover {
+        background: #2b2b2b;
+        border-color: #2b2b2b;
+      }
+      .hero-hint {
+        margin: 0;
+        font-size: var(--type-caption-size);
+        color: var(--color-text-muted);
+      }
+      .examples {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--space-xs);
+        max-width: 36ch;
+      }
+      .example {
+        font-family: var(--font-sans);
+        font-size: var(--type-body-md-regular-size);
+        color: var(--color-text-primary);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-pill);
+        padding: var(--space-sm) var(--space-lg);
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .example:hover {
+        background: var(--color-surface-hover);
+      }
+      .prompt-hint {
+        margin: 0 0 var(--space-xl);
+        font-size: var(--type-caption-size);
+        color: var(--color-text-muted);
+        font-style: italic;
       }
 
       /* -------------------------------------------------------- transcript */
@@ -376,7 +501,9 @@
         margin-top: var(--space-sm);
       }
 
-      /* tool chip — icon-chip made clickable, danger colour when the call failed */
+      /* tool chip — icon-chip made clickable. A "warn" chip (not_found,
+         ambiguous_stop, etc.) is a slightly darker neutral grey, not red —
+         these are normal recovery questions, not failures. */
       .chip {
         font-family: var(--font-sans);
         font-size: var(--type-caption-size);
@@ -402,22 +529,21 @@
         outline-offset: 2px;
       }
       .chip.warn {
-        background: var(--color-danger-bg);
-        color: var(--color-danger-text);
+        background: var(--color-border);
+        color: var(--color-text-primary);
       }
       .chip.warn::before {
-        color: var(--color-danger-text);
-        opacity: 0.7;
+        color: var(--color-text-secondary);
       }
       .chip.warn:hover {
-        background: var(--color-danger-border);
+        background: var(--color-text-muted);
+        color: #ffffff;
       }
 
       /* -------------------------------------------------------- tool calls */
-      /* component: result-card / error-banner. A failed call uses the
-         system's one real semantic colour (danger red) instead of a
-         improvised "polarity flip" — where-bus reserves red for exactly
-         this: a genuine failure, never a route or a warning-lite. */
+      /* component: result-card. A "warn" call (not_found, ambiguous_stop,
+         direction_ambiguous...) is a neutral grey-on-grey, not red — these
+         are the agent asking a normal follow-up question, not a failure. */
 
       .call {
         border-radius: var(--radius-xl);
@@ -437,8 +563,8 @@
         margin-bottom: 0;
       }
       .call.warn {
-        background: var(--color-danger-bg);
-        border-color: var(--color-danger-border);
+        background: var(--color-surface-hover);
+        border-color: var(--color-border);
       }
       .call.flash {
         box-shadow: var(--shadow-xl);
@@ -457,19 +583,12 @@
         color: var(--color-text-primary);
         word-break: break-all;
       }
-      .call.warn .call-name {
-        color: var(--color-danger-text);
-      }
       .call-time {
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--color-text-secondary);
         font-variant-numeric: tabular-nums;
         flex: none;
-      }
-      .call.warn .call-time {
-        color: var(--color-danger-text);
-        opacity: 0.7;
       }
 
       .call-args {
@@ -485,10 +604,6 @@
         overflow-x: auto;
         white-space: pre;
       }
-      .call.warn .call-args {
-        background: #ffffff;
-        border-color: var(--color-danger-border);
-      }
       .call-args:empty {
         display: none;
       }
@@ -498,9 +613,6 @@
         font-size: var(--type-caption-size);
         color: var(--color-text-primary);
       }
-      .call.warn .call-msg {
-        color: var(--color-danger-text);
-      }
 
       .call-reason {
         display: inline-block;
@@ -509,14 +621,11 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
         color: var(--color-text-secondary);
-        background: var(--color-surface-hover);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
         border-radius: var(--radius-md);
         padding: 1px var(--space-sm);
         margin-bottom: var(--space-xs);
-      }
-      .call.warn .call-reason {
-        color: var(--color-danger-text);
-        background: var(--color-danger-border);
       }
 
       /* component: eta-row — a live arrival, rendered like where-bus's own
@@ -576,6 +685,58 @@
         font-variant-numeric: tabular-nums;
       }
 
+      /* Arrival card — the visual payoff inside the conversation itself,
+         attached under the agent's spoken reply. Bigger and calmer than the
+         dense eta-row used in the side tool feed. */
+      .arrival-card {
+        margin-top: var(--space-sm);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-xl);
+        padding: var(--space-lg);
+        max-width: 320px;
+      }
+      .arrival-top {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-sm);
+      }
+      .arrival-stop {
+        font-size: var(--type-body-md-size);
+        font-weight: var(--type-body-md-weight);
+        color: var(--color-text-primary);
+      }
+      .arrival-hero {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-xxs);
+        line-height: 1;
+        margin-bottom: var(--space-md);
+      }
+      .arrival-num {
+        font-size: 40px;
+        font-weight: 700;
+        color: var(--color-text-primary);
+        font-variant-numeric: tabular-nums;
+      }
+      .arrival-unit {
+        font-size: var(--type-title-md-size);
+        font-weight: 500;
+        color: var(--color-text-secondary);
+      }
+      .arrival-following {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-xxs);
+        padding-top: var(--space-sm);
+        border-top: 1px solid var(--color-border-subtle);
+      }
+      .arrival-following span {
+        font-size: var(--type-caption-size);
+        color: var(--color-text-secondary);
+      }
+
       /* ------------------------------------------------------- control bar */
 
       .bar {
@@ -583,7 +744,7 @@
         height: var(--bar-h);
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: center;
         gap: var(--space-lg);
         padding: 0 var(--space-2xl);
         padding-bottom: env(safe-area-inset-bottom);
@@ -659,26 +820,6 @@
       #talk.ending:hover:not(:disabled) {
         background: var(--color-surface-hover);
         border-color: var(--color-text-secondary);
-      }
-
-      .meta {
-        font-family: var(--font-mono);
-        font-size: 10.5px;
-        color: var(--color-text-muted);
-        text-align: right;
-        line-height: 1.5;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .meta b {
-        color: var(--color-text-secondary);
-        font-weight: 500;
-      }
-      .meta span {
-        display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       /* ------------------------------------------------------- alert banner */
@@ -935,12 +1076,18 @@
         }
         .top {
           padding: var(--space-md) var(--space-lg);
+          flex-wrap: wrap;
+          row-gap: var(--space-sm);
         }
         .brand p {
           display: none;
         }
         .brand-text {
           gap: 0;
+        }
+        .top-actions {
+          width: 100%;
+          justify-content: flex-end;
         }
         .alert-banner {
           padding: var(--space-md) var(--space-lg);
@@ -950,8 +1097,10 @@
           line-height: var(--type-title-md-lh);
         }
         main {
-          grid-template-columns: 1fr;
           overflow: visible;
+        }
+        body.tools-open main {
+          grid-template-columns: 1fr;
         }
         /* Nod to where-bus's bottom-sheet: the second stacked pane picks up
            rounded top corners and a lifted shadow instead of a flat divider —
@@ -1008,9 +1157,6 @@
           padding: var(--space-md) var(--space-xl);
           font-size: var(--type-body-md-size);
         }
-        .meta {
-          font-size: 10px;
-        }
         .ghost {
           padding: var(--space-xs) var(--space-md);
         }
@@ -1058,6 +1204,7 @@
         </div>
       </div>
       <div class="top-actions">
+        <button id="tools-toggle" class="ghost" type="button" aria-expanded="false">How it works</button>
         <button id="info-btn" class="ghost" type="button">Demo data</button>
         <span id="status" data-state="idle">Idle</span>
       </div>
@@ -1069,22 +1216,33 @@
     </div>
 
     <main>
-      <section class="pane">
+      <section class="pane hero-pane">
         <div class="pane-head">
           <h2>Conversation</h2>
+          <span class="listening" id="listening" data-live="false">
+            <span></span><span></span><span></span><span></span>
+          </span>
           <span class="hint">interrupt any time</span>
         </div>
         <div class="scroll" id="transcript">
-          <div class="empty">
-            <p>Start the call and ask when the next bus is at KL Sentral.</p>
-            <div id="popular-stops"></div>
+          <div class="empty" id="transcript-empty">
+            <div class="hero">
+              <p class="hero-title">Ask about any RapidKL bus, live, by voice.</p>
+              <button id="hero-talk" class="hero-cta" type="button">Start call</button>
+              <p class="hero-hint">Or try saying:</p>
+              <div class="examples">
+                <button class="example" type="button" data-prompt="Next bus at KL Sentral">Next bus at KL Sentral</button>
+                <button class="example" type="button" data-prompt="Find stops near me">Find stops near me</button>
+                <button class="example" type="button" data-prompt="I'm at Universiti Malaya">I'm at Universiti Malaya</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="pane">
+      <section class="pane tools" id="tools-pane">
         <div class="pane-head">
-          <h2>AssemblyAI → your API</h2>
+          <h2>How it works</h2>
           <span class="count" id="call-count">0 calls</span>
         </div>
         <div class="scroll" id="calls">
@@ -1100,10 +1258,6 @@
       <div class="bar-left">
         <button id="talk">Start call</button>
         <span id="timer" data-state="idle">0:00</span>
-      </div>
-      <div class="meta">
-        <span>agent <b id="agent-id">…</b></span>
-        <span id="cost">$4.50/hr · billed per second</span>
       </div>
     </div>
 

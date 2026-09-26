@@ -8,10 +8,10 @@ const els = {
   transcript: document.getElementById("transcript"),
   calls: document.getElementById("calls"),
   count: document.getElementById("call-count"),
-  agentId: document.getElementById("agent-id"),
   timer: document.getElementById("timer"),
   alertBanner: document.getElementById("alert-banner"),
   alertText: document.getElementById("alert-text"),
+  listening: document.getElementById("listening"),
 };
 
 let ws = null;
@@ -19,6 +19,12 @@ let audioCtx = null;
 let micStream = null;
 let workletNode = null;
 let live = false;
+
+// No text input to a voice agent, so an example prompt can't fake what the
+// caller "said" — tapping one starts the call and leaves a note of what to
+// try, once, instead of pretending a transcript line that never happened.
+let currentAgentId = "";
+let pendingPromptHint = null;
 
 // Playback scheduling. Holding the sources lets barge-in cut the agent off.
 let playHead = 0;
@@ -112,6 +118,15 @@ function addLine(who, text) {
   body.textContent = text;
   row.append(label, body);
 
+  // The visual payoff: a next_arrivals result behind this reply gets a big
+  // arrival card right in the conversation, not just a line in the feed.
+  if (who === "agent") {
+    const arrivalEvent = pending.find(
+      (event) => event.tool === "next_arrivals" && event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length
+    );
+    if (arrivalEvent) row.append(renderArrivalCard(arrivalEvent.result));
+  }
+
   // Tie this reply to the tool calls that produced it. Repeats of the same
   // tool in one batch (e.g. a chatty get_now) collapse into one "tool ×N"
   // chip rather than a wall of identical buttons.
@@ -179,6 +194,45 @@ function renderEtaList(arrivals) {
     list.append(row);
   }
   return list;
+}
+
+// "3 minutes" / "22 minutes" -> {num: "3", unit: "min"}; "arriving now" has
+// no number to extract, so it gets its own big word instead.
+function bigEta(arrival) {
+  if (arrival.eta_human === "arriving now") return { num: "NOW", unit: "" };
+  const match = /\d+/.exec(arrival.eta_human);
+  return { num: match ? match[0] : "?", unit: "min" };
+}
+
+// The arrival card attached under the agent's reply in the conversation
+// itself — route badge, stop name, one big number, up to 2 following buses.
+function renderArrivalCard(result) {
+  const [heroArrival, ...rest] = result.arrivals;
+  const following = rest.slice(0, 2);
+  const category = heroArrival.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
+
+  const card = el("div", "arrival-card");
+
+  const top = el("div", "arrival-top");
+  top.append(el("span", `route-badge ${category}`, `Route ${heroArrival.route}`));
+  if (result.stop) top.append(el("span", "arrival-stop", result.stop));
+  card.append(top);
+
+  const { num, unit } = bigEta(heroArrival);
+  const hero = el("div", "arrival-hero");
+  hero.append(el("span", "arrival-num", num));
+  if (unit) hero.append(el("span", "arrival-unit", unit));
+  card.append(hero);
+
+  if (following.length) {
+    const list = el("div", "arrival-following");
+    for (const arrival of following) {
+      list.append(el("span", null, `Then Route ${arrival.route} · ${arrival.eta_human}`));
+    }
+    card.append(list);
+  }
+
+  return card;
 }
 
 function renderCall(event) {
@@ -362,7 +416,7 @@ async function start() {
     els.talk.disabled = false;
     return;
   }
-  els.agentId.textContent = config.agent_id;
+  currentAgentId = config.agent_id;
 
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
@@ -396,11 +450,17 @@ async function start() {
       case "session.ready":
         live = true;
         setStatus("Live", "live");
+        els.listening.dataset.live = "true";
         els.talk.disabled = false;
         els.talk.textContent = "End call";
         els.talk.classList.add("ending");
         startTimer();
         pollTimer = setInterval(pollEvents, POLL_MS);
+        if (pendingPromptHint) {
+          clearEmpty(els.transcript);
+          els.transcript.append(el("p", "prompt-hint", `Try saying: "${pendingPromptHint}"`));
+          pendingPromptHint = null;
+        }
         break;
 
       case "input.speech.started":
@@ -462,6 +522,7 @@ function stop() {
 function cleanup() {
   if (!live && !micStream && !audioCtx) return;
   live = false;
+  els.listening.dataset.live = "false";
   stopTimer(); // freeze the duration, don't clear it
 
   clearInterval(pollTimer);
@@ -490,23 +551,32 @@ els.talk.addEventListener("click", () => (live ? stop() : start()));
 fetch("/api/config")
   .then((r) => r.json())
   .then((c) => {
-    els.agentId.textContent = c.agent_id || "not published";
-  })
-  .catch(() => {
-    els.agentId.textContent = "api offline";
-  });
-
-// ------------------------------------------------------------- popular stops
-
-fetch("/api/popular-stops")
-  .then((r) => r.json())
-  .then((data) => {
-    const holder = document.getElementById("popular-stops");
-    if (!holder || !data.stops || !data.stops.length) return;
-    holder.append(el("p", "block-note", "Popular stops:"));
-    holder.append(pills(data.stops));
+    currentAgentId = c.agent_id || "";
   })
   .catch(() => {});
+
+// ------------------------------------------------------------------ hero
+
+document.getElementById("hero-talk").addEventListener("click", () => els.talk.click());
+
+for (const button of document.querySelectorAll(".example")) {
+  button.addEventListener("click", () => {
+    pendingPromptHint = button.dataset.prompt;
+    if (!live) els.talk.click();
+  });
+}
+
+// ------------------------------------------------------------ tools panel
+
+const toolsToggle = document.getElementById("tools-toggle");
+
+function setToolsOpen(open) {
+  document.body.classList.toggle("tools-open", open);
+  toolsToggle.setAttribute("aria-expanded", String(open));
+}
+
+toolsToggle.addEventListener("click", () => setToolsOpen(!document.body.classList.contains("tools-open")));
+setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on mobile
 
 // ----------------------------------------------------------- demo data
 
@@ -557,6 +627,8 @@ function renderInfo(data) {
   config.append(kv([
     ["Name", data.agent.name],
     ["Voice", data.agent.voice],
+    ["Agent ID", currentAgentId || "not published"],
+    ["Pricing", "$4.50/hr, billed per second"],
   ]));
   config.append(el("p", "block-note", "Tools it is allowed to call:"));
   config.append(pills(data.agent.tools.map((t) => t.name), "tool"));
