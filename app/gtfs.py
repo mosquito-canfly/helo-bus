@@ -63,6 +63,7 @@ MAX_ETA_SECONDS = 35 * 60
 ARRIVING_METERS = 150.0
 HAVERSINE_ROAD_FACTOR = 1.4  # fallback multiplier when no shape data
 DEFAULT_SPEED_MPS = 3.0  # ~11 km/h, used when the feed omits speed
+MIN_GUESS_SCORE = 0.5  # below this, a "did you mean" guess is worse than none
 
 # Small fixed dict, not a general normaliser — RapidKL's own stop names use
 # these abbreviations inconsistently.
@@ -91,6 +92,7 @@ ABBREVIATIONS = {
     "museum": "muzium",
     "palace": "istana",
     "university": "universiti",
+    "uni": "universiti",
     "school": "sekolah",
     "field": "padang",
     "road": "jalan",
@@ -187,8 +189,9 @@ def _download_static(category: str) -> None:
         zf.extractall(cache_dir)
 
 
-def _read_csv(category: str, name: str) -> csv.DictReader:
-    return csv.DictReader((_cache_dir(category) / name).open(encoding="utf-8-sig"))
+def _read_csv(category: str, name: str) -> list[dict]:
+    with (_cache_dir(category) / name).open(encoding="utf-8-sig") as f:
+        return list(csv.DictReader(f))
 
 
 def _load_stops(category: str) -> None:
@@ -386,43 +389,42 @@ def _speak_list(items: list[str]) -> str:
 
 
 def _word_candidates(normalized_query: str) -> list[StopGroup]:
-    """Order-independent, mishearing-tolerant word match.
+    """Order-independent word match.
 
-    Each query word is expanded to itself plus any soundex-sibling or
-    close-spelling real word before matching, which is what catches both
-    "single word returns every group containing it" and STT mishearings
-    (a swapped consonant, a dropped syllable) in one pass. Groups
-    containing ALL query words (in any order) win; if none do, groups
-    containing ANY of them are returned instead.
+    A word actually present in some group name is trusted outright. A word
+    that ISN'T is only ever expanded via Soundex/close-spelling when it's
+    the sole word in the query — with other real words alongside it, a
+    stray Soundex coincidence (e.g. "Malaya" sound-alikes to "Mall"/"Mila")
+    must never mix noise groups in next to a real match, so multi-word
+    queries use only the words that hit exactly, never the fuzzy fallback.
     """
     words = normalized_query.split()
     if not words:
         return []
 
-    per_word_groups: list[set[str]] = []
-    for word in words:
-        if word in _word_to_groups:
-            candidates = {word}
-        else:
-            # Only fall back to sound-alike/spelling expansion for a word
-            # that didn't match outright — and only for words long enough
-            # that a short-string coincidence isn't likely (a 3-letter word
-            # matches almost anything by Soundex or close ratio).
-            candidates = set(_soundex_to_words.get(_soundex(word), set())) if len(word) >= 4 else set()
-            if len(word) >= 4:
-                candidates |= set(difflib.get_close_matches(word, _word_to_groups.keys(), n=3, cutoff=0.84))
-        groups: set[str] = set()
-        for cand in candidates:
-            groups |= _word_to_groups.get(cand, set())
-        per_word_groups.append(groups)
+    exact_sets = [_word_to_groups.get(w, set()) for w in words]
+    recognized = sum(1 for s in exact_sets if s)
 
-    recognized = sum(1 for g in per_word_groups if g)
-    if recognized <= len(words) / 2:
-        return []  # most of the query is noise; let a lower-confidence tier handle it
+    if recognized > 0:
+        if recognized <= len(words) / 2:
+            return []  # most of the query is noise; let a lower-confidence tier handle it
+        non_empty = [s for s in exact_sets if s]
+        all_match = set.intersection(*non_empty) if len(non_empty) == recognized else set()
+        keys = all_match or set.union(*non_empty)
+        return [_groups_by_name[k] for k in keys]
 
-    all_match = set.intersection(*per_word_groups) if all(per_word_groups) else set()
-    keys = all_match or set.union(*per_word_groups)
-    return [_groups_by_name[k] for k in keys]
+    # Nothing matched a real word at all. Only worth a Soundex/spelling
+    # guess when the query is a single word — there's no real match here
+    # for a coincidental fuzzy hit to contaminate.
+    if len(words) != 1 or len(words[0]) < 4:
+        return []
+    word = words[0]
+    candidates = set(_soundex_to_words.get(_soundex(word), set()))
+    candidates |= set(difflib.get_close_matches(word, _word_to_groups.keys(), n=3, cutoff=0.84))
+    groups: set[str] = set()
+    for cand in candidates:
+        groups |= _word_to_groups.get(cand, set())
+    return [_groups_by_name[k] for k in groups]
 
 
 def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
@@ -445,13 +447,19 @@ def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
         word_matches.sort(key=lambda g: len(g.name))
         return word_matches[:5], True
 
-    close = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=5, cutoff=0.72)
+    # Confident tier, so the bar is high — 0.72 let scrambled multi-word
+    # noise ("fidudaman sara") slip through at ~0.74 and get reported as a
+    # sure match instead of a guess. Real typos score .95+, well clear of 0.8.
+    close = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=5, cutoff=0.8)
     if close:
         return [_groups_by_name[n] for n in close], True
 
-    # Last resort: never return a bare not-found. Best-effort top 3, marked
-    # low-confidence so callers phrase this as "did you mean" not "found".
-    guess = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=3, cutoff=0.3)
+    # Last resort: a best-effort top-3 guess, marked low-confidence so
+    # callers phrase this as "did you mean" not "found" — but only above
+    # MIN_GUESS_SCORE. Below that, a guess is worse than no guess: dishing
+    # out unrelated stop names reads as confident nonsense. An empty list
+    # here is the signal to offer find_nearby_stops instead of guessing.
+    guess = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=3, cutoff=MIN_GUESS_SCORE)
     return [_groups_by_name[n] for n in guess], False
 
 
@@ -459,6 +467,12 @@ def find_stop(query: str) -> dict:
     _load_static()
     matches, confident = _search_groups(query)
     if not confident:
+        if not matches:
+            return {
+                "ok": False,
+                "reason": "not_found",
+                "message": "I couldn't find a stop by that name. Want me to check what's nearby instead?",
+            }
         names = [m.name for m in matches]
         return {
             "ok": False,
@@ -482,6 +496,12 @@ def _resolve_group(stop_text: str) -> tuple[StopGroup | None, dict | None]:
     """Returns (group, None) on a clean match, or (None, error_payload)."""
     matches, confident = _search_groups(stop_text)
     if not confident:
+        if not matches:
+            return None, {
+                "ok": False,
+                "reason": "not_found",
+                "message": "I couldn't find a stop by that name. Want me to check what's nearby instead?",
+            }
         names = [m.name for m in matches]
         return None, {
             "ok": False,

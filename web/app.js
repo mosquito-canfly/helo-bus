@@ -112,17 +112,28 @@ function addLine(who, text) {
   body.textContent = text;
   row.append(label, body);
 
-  // Tie this reply to the tool calls that produced it.
+  // Tie this reply to the tool calls that produced it. Repeats of the same
+  // tool in one batch (e.g. a chatty get_now) collapse into one "tool ×N"
+  // chip rather than a wall of identical buttons.
   if (who === "agent" && pending.length) {
     const used = document.createElement("div");
     used.className = "used";
+    const grouped = new Map(); // tool name -> { seqs, failed (of the latest call) }
     for (const event of pending) {
+      const group = grouped.get(event.tool) || { seqs: [] };
+      group.seqs.push(event.seq);
+      group.failed = event.failed;
+      grouped.set(event.tool, group);
+    }
+    for (const [tool, group] of grouped) {
+      const count = group.seqs.length;
+      const lastSeq = group.seqs[count - 1];
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "chip" + (event.failed ? " warn" : "");
-      chip.textContent = event.tool;
-      chip.title = "Show this call";
-      chip.addEventListener("click", () => revealCall(event.seq));
+      chip.className = "chip" + (group.failed ? " warn" : "");
+      chip.textContent = count > 1 ? `${tool} ×${count}` : tool;
+      chip.title = count > 1 ? `Show the latest of ${count} calls` : "Show this call";
+      chip.addEventListener("click", () => revealCall(lastSeq));
       used.append(chip);
     }
     row.append(used);
