@@ -272,9 +272,29 @@ function stopPlayback() {
   playHead = 0;
 }
 
+// ------------------------------------------------------------- location
+
+function shareLocation() {
+  // Best-effort and silent: find_nearby_stops just won't work without it,
+  // which the agent already handles as a normal ok:false reason.
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      fetch("/api/location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      }).catch(() => {});
+    },
+    () => {},
+    { timeout: 8000 }
+  );
+}
+
 // --------------------------------------------------------------- session
 
 async function start() {
+  shareLocation(); // ask now, while the call-start click still counts as a user gesture
   resetTimer(); // clear the previous call's duration
   setStatus("Connecting", "busy");
   els.talk.disabled = true;
@@ -431,6 +451,18 @@ fetch("/api/config")
   .catch(() => {
     els.agentId.textContent = "api offline";
   });
+
+// ------------------------------------------------------------- popular stops
+
+fetch("/api/popular-stops")
+  .then((r) => r.json())
+  .then((data) => {
+    const holder = document.getElementById("popular-stops");
+    if (!holder || !data.stops || !data.stops.length) return;
+    holder.append(el("p", "block-note", "Popular stops:"));
+    holder.append(pills(data.stops));
+  })
+  .catch(() => {});
 
 // ----------------------------------------------------------- demo data
 

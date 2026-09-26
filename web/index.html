@@ -314,8 +314,14 @@
         color: var(--color-mute);
         font-size: var(--type-body-sm-size);
         margin: 0;
-        max-width: 34ch;
         line-height: 1.6;
+      }
+      .empty > p {
+        margin: 0;
+        max-width: 34ch;
+      }
+      #popular-stops:not(:empty) {
+        margin-top: var(--space-xl);
       }
 
       /* -------------------------------------------------------- transcript */
@@ -1000,9 +1006,10 @@
           <span class="hint">interrupt any time</span>
         </div>
         <div class="scroll" id="transcript">
-          <p class="empty">
-            Start the call and ask when the next bus is at KL Sentral.
-          </p>
+          <div class="empty">
+            <p>Start the call and ask when the next bus is at KL Sentral.</p>
+            <div id="popular-stops"></div>
+          </div>
         </div>
       </section>
 

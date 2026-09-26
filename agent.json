@@ -1,8 +1,10 @@
 {
   "name": "Helo Bus",
   "greeting": "Helo! I'm Helo Bus. Which stop are you at, and where are you headed?",
-  "voice": { "voice_id": "alba" },
-  "system_prompt": "You are Helo Bus, a voice assistant that tells RapidKL bus riders in Kuala Lumpur when their bus is arriving. Keep every reply under two sentences and speak naturally, like a friend checking the bus app for someone.\n\nYou have no sense of the current time. Call get_now before reasoning about whether buses are running now.\n\nTypical flow:\n1. Find out which stop the caller is at. Call find_stop with whatever they said. If it returns more than one candidate, read the short list back and ask which one.\n2. Call next_arrivals with the resolved stop name. Pass a route only if the caller named one (e.g. 'T789' or '300') — otherwise leave it out and you'll get all routes serving that stop.\n3. If the caller wants to be notified rather than told now, call set_arrival_alert with the stop, the route they named, and how many minutes' notice they want. A route is required for an alert, so ask which route if they haven't said.\n\nEvery tool returns a 'message' field — base what you say on it. If a tool returns ok=false, act on the reason: 'ambiguous_stop' or the find_stop candidates list means read the options back and ask which one; 'direction_ambiguous' means ask which direction; 'unknown_route' means ask the caller to repeat the route number or letter; 'no_service_night' means tell them RapidKL isn't running right now and when it starts again; 'feed_unavailable' means live positions are temporarily down, suggest trying again shortly — never say the buses have stopped running; 'no_buses_nearby' means nothing is close enough right now, distinct from the service being down. Never invent an ETA, a stop name, or a route you weren't given by a tool.",
+  "voice": {
+    "voice_id": "alba"
+  },
+  "system_prompt": "You are Helo Bus, a voice assistant that tells RapidKL bus riders in Kuala Lumpur when their bus is arriving. Keep every reply under two sentences and speak naturally, like a friend checking the bus app for someone.\n\nYou have no sense of the current time. Call get_now before reasoning about whether buses are running now.\n\nTypical flow:\n1. Find out which stop the caller is at. Call find_stop with whatever they said. If the caller doesn't know the stop name, or can't describe it, call find_nearby_stops instead — it uses their phone's location (if they've shared it on the page) to suggest the closest ones.\n2. Call next_arrivals with the resolved stop name. Pass a route only if the caller named one (e.g. 'T789' or '300') — otherwise leave it out and you'll get all routes serving that stop.\n3. If the caller wants to be notified rather than told now, call set_arrival_alert with the stop, the route they named, and how many minutes' notice they want. A route is required for an alert, so ask which route if they haven't said.\n\nEvery tool returns a 'message' field — base what you say on it. If a tool returns ok=false, act on the reason: 'not_found' still comes with a 'candidates' list of best guesses — read them back as a question ('Did you mean X or Y?'), don't just say you couldn't find it; 'ambiguous_stop' also carries candidates — read the short list back and ask which one; 'direction_ambiguous' means ask which direction; 'unknown_route' means ask the caller to repeat the route number or letter, digit by digit if needed; 'no_service_night' means tell them RapidKL isn't running right now and when it starts again; 'feed_unavailable' means live positions are temporarily down, suggest trying again shortly — never say the buses have stopped running; 'no_buses_nearby' means nothing is close enough right now, distinct from the service being down; 'no_location' (from find_nearby_stops) means ask them to share their location on the page, or name a stop instead. Never invent an ETA, a stop name, or a route you weren't given by a tool.",
   "keyterms": [
     "RapidKL",
     "KL Sentral",
@@ -10,14 +12,114 @@
     "Mid Valley",
     "next bus",
     "arrival",
-    "platform"
+    "platform",
+    "Monorail Chowkit",
+    "Edc Hotel",
+    "Komersial Tar",
+    "LRT Masjid Jamek",
+    "Medan Mara",
+    "Pasar Chow Kit",
+    "Sri Amar",
+    "Brickfields",
+    "Chowkit/kfc (Barat)",
+    "Hotel Scott KL Sentral",
+    "Kompleks Pertama",
+    "LRT Sultan Ismail/wisma Sime Darby",
+    "Palm Court",
+    "SK Methodist",
+    "Sentral Exhibition Mall",
+    "LRT Asia Jaya",
+    "SKPK Lelaki JLN Batu",
+    "Sogo KL",
+    "Wisma Mcis",
+    "Amanahraya",
+    "Ampang Point (Opp)",
+    "BSN Lebuh Ampang",
+    "Capsquare",
+    "Coliseum",
+    "Globe KL",
+    "Hentian Bandar Seksyen 14",
+    "Hentian Munshi Abdullah",
+    "Jabatan Warisan Negara",
+    "LRT Bangsar",
+    "Menara Uab/cimb",
+    "PJ Walk",
+    "Public Bank (Opp)",
+    "Shell",
+    "Yayasan Cancerlink",
+    "Bangsar Utama",
+    "Damai Hospital",
+    "Damai Hospital (Opp)",
+    "Hospital Tawakal",
+    "LRT Bangsar (Opp)",
+    "Perkim",
+    "Perkim/pusrawi",
+    "Suasana Sentral Loft",
+    "Tasik Taman Jaya",
+    "Ampang Point",
+    "Apartment Putra Ria (Opp)",
+    "Balai Islam TNB",
+    "Bbcc/menara Eco World",
+    "Dataran Pahlawan",
+    "Flat Taman Dato Ahmad Razali",
+    "Furama",
+    "Giatmara Ampang Jaya",
+    "Grand Seasons Hotel",
+    "HKL (Barat)",
+    "HKL (Opp)",
+    "HKL (Selatan)",
+    "HQ TNB",
+    "Hospital Tung Shin",
+    "Hotel Mercure (Opp)",
+    "Kompleks B/ Laman Perdana (Timur)",
+    "Kompleks Kerajaan Parcel D",
+    "Kompleks Parcel E (Barat)",
+    "LRT Abdullah Hukum",
+    "LRT Ampang (Opp)",
+    "LRT Pudu/majestic",
+    "LRT Pudu/majestic (Opp)",
+    "Maju Junction",
+    "Mardhiyyah Hotel & Suites",
+    "PPR Abdullah Hukum",
+    "Picoms",
+    "Rozel",
+    "TM Brickfields",
+    "Taman Botani Putrajaya",
+    "Taman Putra Perdana (Timur)",
+    "Ampang Waterfront (Barat)",
+    "Ampang Waterfront 1",
+    "Apartment Cempaka",
+    "Apartment Merpati",
+    "BHP",
+    "Guan Ying Ting",
+    "171",
+    "780",
+    "201",
+    "173",
+    "202",
+    "753",
+    "MPS1",
+    "220",
+    "450",
+    "590",
+    "750",
+    "T406",
+    "772",
+    "200"
   ],
   "tools": [
     {
       "name": "get_now",
       "description": "Get the current date, time and weekday in Kuala Lumpur. Call this before reasoning about whether buses are running now.",
-      "parameters": { "type": "object", "properties": {}, "required": [] },
-      "http": { "url": "{{BASE_URL}}/tools/get_now", "http_method": "POST" },
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "http": {
+        "url": "{{BASE_URL}}/tools/get_now",
+        "http_method": "POST"
+      },
       "timeout_seconds": 10
     },
     {
@@ -29,12 +131,21 @@
           "query": {
             "type": "string",
             "description": "The stop name or landmark the caller mentioned.",
-            "examples": ["KL Sentral", "Pasar Seni", "Mid Valley"]
+            "examples": [
+              "KL Sentral",
+              "Pasar Seni",
+              "Mid Valley"
+            ]
           }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       },
-      "http": { "url": "{{BASE_URL}}/tools/find_stop", "http_method": "POST" },
+      "http": {
+        "url": "{{BASE_URL}}/tools/find_stop",
+        "http_method": "POST"
+      },
       "timeout_seconds": 10
     },
     {
@@ -50,12 +161,20 @@
           "route": {
             "type": "string",
             "description": "Route short name, if the caller named one.",
-            "examples": ["T789", "300"]
+            "examples": [
+              "T789",
+              "300"
+            ]
           }
         },
-        "required": ["stop"]
+        "required": [
+          "stop"
+        ]
       },
-      "http": { "url": "{{BASE_URL}}/tools/next_arrivals", "http_method": "POST" },
+      "http": {
+        "url": "{{BASE_URL}}/tools/next_arrivals",
+        "http_method": "POST"
+      },
       "timeout_seconds": 15
     },
     {
@@ -71,19 +190,46 @@
           "route": {
             "type": "string",
             "description": "Route short name the caller is waiting for.",
-            "examples": ["T789", "300"]
+            "examples": [
+              "T789",
+              "300"
+            ]
           },
           "threshold_minutes": {
             "type": "integer",
             "description": "Notify when the bus is about this many minutes away.",
             "minimum": 1,
             "maximum": 35,
-            "examples": [5, 10]
+            "examples": [
+              5,
+              10
+            ]
           }
         },
-        "required": ["stop", "route", "threshold_minutes"]
+        "required": [
+          "stop",
+          "route",
+          "threshold_minutes"
+        ]
       },
-      "http": { "url": "{{BASE_URL}}/tools/set_arrival_alert", "http_method": "POST" },
+      "http": {
+        "url": "{{BASE_URL}}/tools/set_arrival_alert",
+        "http_method": "POST"
+      },
+      "timeout_seconds": 10
+    },
+    {
+      "name": "find_nearby_stops",
+      "description": "Find the closest RapidKL stops to the caller's current location, with walking distance. Use this when the caller doesn't know or can't say the stop name. Requires the caller to have shared their location on the web page first.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "http": {
+        "url": "{{BASE_URL}}/tools/find_nearby_stops",
+        "http_method": "POST"
+      },
       "timeout_seconds": 10
     }
   ]

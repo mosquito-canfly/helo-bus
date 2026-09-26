@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import difflib
 import io
+import json
 import re
 import time
 import zipfile
@@ -33,6 +34,7 @@ from . import store
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT / ".gtfs_cache" / "rapid-bus-kl"
+ALIASES_FILE = ROOT / "data" / "aliases.json"
 STATIC_URL = "https://api.data.gov.my/gtfs-static/prasarana?category=rapid-bus-kl"
 RT_URL = "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl"
 
@@ -59,14 +61,35 @@ ABBREVIATIONS = {
     "kg": "kampung",
     "bt": "bukit",
     "sg": "sungai",
+    # English word -> the Malay word GTFS actually uses, so a caller saying
+    # "KL Central" or "National Mosque" still word-matches "KL Sentral" /
+    # "Masjid Negara" without a per-place alias entry.
+    "central": "sentral",
+    "station": "stesen",
+    "market": "pasar",
+    "tower": "menara",
+    "garden": "taman",
+    "gardens": "taman",
+    "lake": "tasik",
+    "mosque": "masjid",
+    "temple": "kuil",
+    "museum": "muzium",
+    "palace": "istana",
+    "university": "universiti",
+    "school": "sekolah",
+    "field": "padang",
+    "road": "jalan",
+    "street": "jalan",
+    "bridge": "jambatan",
+    "national": "negara",
+    "new": "baru",
+    "old": "lama",
 }
 
-# Spoken names that don't literally match GTFS text (checked before fuzzy
-# match). "KL Sentral", "Pasar Seni" and "Mid Valley" already match the feed
-# directly and need no entry here.
-ALIASES = {
-    "1 utama": "one utama",
-}
+# Spoken variants that don't literally match GTFS text and aren't a simple
+# word swap — abbreviations, landmark nicknames, informal names. Loaded from
+# data/aliases.json (a human-editable seed list) rather than hardcoded here.
+ALIASES: dict[str, str] = {}
 
 # Stop names in this feed are frequently prefixed with an internal code
 # ("KL1079 KL SENTRAL", "(M) PPJ254 MRT PUTRAJAYA SENTRAL") that has to be
@@ -91,6 +114,9 @@ _stop_to_routes: dict[str, list[tuple[str, int]]] = {}  # stop_id -> [(route_id,
 _trip_direction: dict[str, int] = {}  # trip_id -> direction_id, for the RT feed
 
 _groups_by_name: dict[str, StopGroup] = {}  # normalised name -> group
+_word_to_groups: dict[str, set[str]] = {}  # normalised word -> {group keys}
+_word_soundex: dict[str, str] = {}  # normalised word -> soundex code
+_soundex_to_words: dict[str, set[str]] = {}  # soundex code -> {words}
 _loaded = False
 
 
@@ -106,6 +132,32 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     return r * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
+_SOUNDEX_CODES = {
+    **dict.fromkeys("bfpv", "1"),
+    **dict.fromkeys("cgjkqsxz", "2"),
+    **dict.fromkeys("dt", "3"),
+    "l": "4",
+    **dict.fromkeys("mn", "5"),
+    "r": "6",
+}
+
+
+def _soundex(word: str) -> str:
+    """Classic Soundex: catches mishearings like STT swapping similar
+    consonants ("Damansaraa"/"Tamansara") without an external dependency."""
+    word = word.lower()
+    if not word:
+        return ""
+    codes = [_SOUNDEX_CODES.get(ch, "") for ch in word]
+    out = word[0].upper()
+    prev = codes[0]
+    for code in codes[1:]:
+        if code and code != prev:
+            out += code
+        prev = code
+    return (out + "000")[:4]
 
 
 # --------------------------------------------------------------- static load
@@ -252,6 +304,21 @@ def _build_stop_groups() -> None:
         group.stop_ids.append(stop_id)
 
 
+def _build_word_index() -> None:
+    for group_key in _groups_by_name:
+        for word in group_key.split():
+            _word_to_groups.setdefault(word, set()).add(group_key)
+    for word in _word_to_groups:
+        code = _soundex(word)
+        _word_soundex[word] = code
+        _soundex_to_words.setdefault(code, set()).add(word)
+
+
+def _load_aliases() -> None:
+    if ALIASES_FILE.exists():
+        ALIASES.update(json.loads(ALIASES_FILE.read_text(encoding="utf-8")))
+
+
 def _load_static() -> None:
     global _loaded
     if _loaded:
@@ -265,34 +332,101 @@ def _load_static() -> None:
     _build_route_paths_and_distances(shapes)
     _build_stop_index()
     _build_stop_groups()
+    _build_word_index()
+    _load_aliases()
     _loaded = True
 
 
 # ----------------------------------------------------------------- find_stop
 
 
-def _search_groups(query: str) -> list[StopGroup]:
+def _speak_list(items: list[str]) -> str:
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + f" or {items[-1]}"
+
+
+def _word_candidates(normalized_query: str) -> list[StopGroup]:
+    """Order-independent, mishearing-tolerant word match.
+
+    Each query word is expanded to itself plus any soundex-sibling or
+    close-spelling real word before matching, which is what catches both
+    "single word returns every group containing it" and STT mishearings
+    (a swapped consonant, a dropped syllable) in one pass. Groups
+    containing ALL query words (in any order) win; if none do, groups
+    containing ANY of them are returned instead.
+    """
+    words = normalized_query.split()
+    if not words:
+        return []
+
+    per_word_groups: list[set[str]] = []
+    for word in words:
+        if word in _word_to_groups:
+            candidates = {word}
+        else:
+            # Only fall back to sound-alike/spelling expansion for a word
+            # that didn't match outright — and only for words long enough
+            # that a short-string coincidence isn't likely (a 3-letter word
+            # matches almost anything by Soundex or close ratio).
+            candidates = set(_soundex_to_words.get(_soundex(word), set())) if len(word) >= 4 else set()
+            if len(word) >= 4:
+                candidates |= set(difflib.get_close_matches(word, _word_to_groups.keys(), n=3, cutoff=0.84))
+        groups: set[str] = set()
+        for cand in candidates:
+            groups |= _word_to_groups.get(cand, set())
+        per_word_groups.append(groups)
+
+    recognized = sum(1 for g in per_word_groups if g)
+    if recognized <= len(words) / 2:
+        return []  # most of the query is noise; let a lower-confidence tier handle it
+
+    all_match = set.intersection(*per_word_groups) if all(per_word_groups) else set()
+    keys = all_match or set.union(*per_word_groups)
+    return [_groups_by_name[k] for k in keys]
+
+
+def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
+    """Returns (matches, confident). confident=False means these are a
+    best-effort guess (the caller heard something, we're not sure what)."""
     normalized = _normalize(query)
     normalized = ALIASES.get(normalized, normalized)
 
     exact = _groups_by_name.get(normalized)
     if exact:
-        return [exact]
+        return [exact], True
 
     contains = [g for name, g in _groups_by_name.items() if normalized in name or name in normalized]
     if contains:
         contains.sort(key=lambda g: len(g.name))
-        return contains[:5]
+        return contains[:5], True
+
+    word_matches = _word_candidates(normalized)
+    if word_matches:
+        word_matches.sort(key=lambda g: len(g.name))
+        return word_matches[:5], True
 
     close = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=5, cutoff=0.72)
-    return [_groups_by_name[n] for n in close]
+    if close:
+        return [_groups_by_name[n] for n in close], True
+
+    # Last resort: never return a bare not-found. Best-effort top 3, marked
+    # low-confidence so callers phrase this as "did you mean" not "found".
+    guess = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=3, cutoff=0.3)
+    return [_groups_by_name[n] for n in guess], False
 
 
 def find_stop(query: str) -> dict:
     _load_static()
-    matches = _search_groups(query)
-    if not matches:
-        return {"ok": False, "reason": "not_found", "message": f"I couldn't find a stop called '{query}'."}
+    matches, confident = _search_groups(query)
+    if not confident:
+        names = [m.name for m in matches]
+        return {
+            "ok": False,
+            "reason": "not_found",
+            "candidates": names,
+            "message": f"I didn't catch a stop by that name. Did you mean {_speak_list(names)}?",
+        }
     if len(matches) == 1:
         group = matches[0]
         return {"ok": True, "stop": group.name, "message": f"Found {group.name}."}
@@ -307,9 +441,15 @@ def find_stop(query: str) -> dict:
 
 def _resolve_group(stop_text: str) -> tuple[StopGroup | None, dict | None]:
     """Returns (group, None) on a clean match, or (None, error_payload)."""
-    matches = _search_groups(stop_text)
-    if not matches:
-        return None, {"ok": False, "reason": "not_found", "message": f"I couldn't find a stop called '{stop_text}'."}
+    matches, confident = _search_groups(stop_text)
+    if not confident:
+        names = [m.name for m in matches]
+        return None, {
+            "ok": False,
+            "reason": "not_found",
+            "candidates": names,
+            "message": f"I didn't catch a stop by that name. Did you mean {_speak_list(names)}?",
+        }
     if len(matches) > 1:
         names = [m.name for m in matches]
         return None, {
@@ -321,11 +461,46 @@ def _resolve_group(stop_text: str) -> tuple[StopGroup | None, dict | None]:
     return matches[0], None
 
 
+# Spoken letters/digits STT sometimes spells out instead of transcribing as
+# the compact route code ("tea eight one five" rather than "T815").
+_SPOKEN_LETTERS = {
+    "tea": "t", "bee": "b", "cee": "c", "see": "c", "dee": "d", "eff": "f",
+    "gee": "g", "aitch": "h", "jay": "j", "kay": "k", "el": "l", "em": "m",
+    "en": "n", "pee": "p", "cue": "q", "are": "r", "ar": "r", "es": "s",
+    "you": "u", "vee": "v", "double-u": "w", "dub": "w", "ex": "x",
+    "why": "y", "zed": "z", "zee": "z", "oh": "0",
+}
+_SPOKEN_DIGITS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+}
+
+
+def _despoken_route_code(text: str) -> str:
+    """"tea eight one five" -> "T815"; "T 815" -> "T815"; leaves an
+    already-compact code like "T815" unchanged."""
+    words = _PUNCT_RE.sub(" ", text.lower()).split()
+    out = []
+    for word in words:
+        if word in _SPOKEN_LETTERS:
+            out.append(_SPOKEN_LETTERS[word])
+        elif word in _SPOKEN_DIGITS:
+            out.append(_SPOKEN_DIGITS[word])
+        else:
+            out.append(word)
+    return "".join(out).upper()
+
+
 def _resolve_route(route_text: str) -> str | None:
     """Route short name -> internal route_id, or None if unrecognised."""
     key = route_text.strip().upper()
     if key in _short_name_to_route_id:
         return _short_name_to_route_id[key]
+
+    despoken = _despoken_route_code(route_text)
+    if despoken in _short_name_to_route_id:
+        return _short_name_to_route_id[despoken]
+
     close = difflib.get_close_matches(key, _short_name_to_route_id.keys(), n=1, cutoff=0.75)
     return _short_name_to_route_id[close[0]] if close else None
 
@@ -594,7 +769,94 @@ def set_arrival_alert(stop_text: str, route_text: str, threshold_minutes: int) -
     }
 
 
+# ------------------------------------------------------------- nearby stops
+
+WALK_SPEED_MPS = 1.4  # ~5 km/h; straight-line distance, not a footpath route
+
+# ponytail: single global slot, same as the rest of this demo's in-memory
+# state (one event log, one alert list) — fine for one caller at a time,
+# would need a per-session key if this ever serves concurrent callers.
+_last_location: tuple[float, float] | None = None
+
+
+def set_location(lat: float, lon: float) -> None:
+    global _last_location
+    _last_location = (lat, lon)
+
+
+def find_nearby_stops(limit: int = 3) -> dict:
+    _load_static()
+    if _last_location is None:
+        return {
+            "ok": False,
+            "reason": "no_location",
+            "message": "I don't have the caller's location. Ask them to share it from the web page, or name a stop instead.",
+        }
+
+    lat, lon = _last_location
+    ranked = []
+    for group in _groups_by_name.values():
+        nearest_m = min(
+            _haversine_km(lat, lon, _stops[sid]["lat"], _stops[sid]["lon"]) * 1000.0
+            for sid in group.stop_ids
+            if sid in _stops
+        )
+        ranked.append((nearest_m, group))
+    ranked.sort(key=lambda t: t[0])
+
+    nearby = []
+    for distance_m, group in ranked[:limit]:
+        minutes = max(1, round(distance_m / WALK_SPEED_MPS / 60))
+        nearby.append({"stop": group.name, "distance_meters": round(distance_m), "walk_minutes": minutes})
+
+    spoken = ", ".join(f"{n['stop']} ({n['walk_minutes']} min walk)" for n in nearby)
+    return {"ok": True, "nearby": nearby, "message": f"Nearest stops: {spoken}."}
+
+
 # ---------------------------------------------------------------- demo info
+
+
+def top_stop_names(limit: int = 80) -> list[str]:
+    """Stop group names ranked by number of distinct routes serving them."""
+    _load_static()
+    ranked = []
+    for group in _groups_by_name.values():
+        route_count = len({r_id for sid in group.stop_ids for r_id, _ in _stop_to_routes.get(sid, [])})
+        ranked.append((route_count, group.name))
+    ranked.sort(key=lambda t: (-t[0], t[1]))
+
+    seen: set[str] = set()
+    names = []
+    for _count, name in ranked:
+        if name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def top_route_short_names(limit: int | None = None) -> list[str]:
+    """Route short names ranked by number of distinct stops on the route."""
+    _load_static()
+    stop_counts: dict[str, int] = {}
+    for path_key, stop_ids in _route_paths.items():
+        route_id = path_key.rsplit("_", 1)[0]
+        stop_counts[route_id] = stop_counts.get(route_id, 0) + len(set(stop_ids))
+    ranked = sorted(stop_counts.items(), key=lambda kv: -kv[1])
+
+    seen: set[str] = set()
+    names = []
+    for route_id, _count in ranked:
+        name = _routes.get(route_id, {}).get("short_name")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+        if limit and len(names) >= limit:
+            break
+    return names
 
 
 def network_summary() -> dict:

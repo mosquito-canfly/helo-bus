@@ -60,6 +60,11 @@ class SetAlertRequest(BaseModel):
     threshold_minutes: int = Field(description="Notify when the bus is about this many minutes away", ge=1, le=35)
 
 
+class LocationRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -86,6 +91,20 @@ def set_arrival_alert(req: SetAlertRequest) -> dict:
     return gtfs.set_arrival_alert(req.stop, req.route, req.threshold_minutes)
 
 
+@app.post("/tools/find_nearby_stops")
+def find_nearby_stops() -> dict:
+    return gtfs.find_nearby_stops()
+
+
+@app.post("/api/location")
+def api_location(req: LocationRequest) -> dict:
+    """The browser posts geolocation here (with the caller's permission) so
+    find_nearby_stops has something to search from — the agent itself never
+    receives raw coordinates, only stop names and walking distances."""
+    gtfs.set_location(req.lat, req.lon)
+    return {"ok": True}
+
+
 # --- demo endpoints -------------------------------------------------------
 
 
@@ -103,6 +122,11 @@ def api_config() -> dict:
         agent_id_file.read_text(encoding="utf-8").strip() if agent_id_file.exists() else ""
     )
     return {"agent_id": agent_id}
+
+
+@app.get("/api/popular-stops")
+def api_popular_stops() -> dict:
+    return {"stops": gtfs.top_stop_names(12)}
 
 
 @app.get("/api/demo-info")
