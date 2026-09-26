@@ -5,10 +5,14 @@ disk on first run. Live vehicle positions are polled on demand — whichever
 code path needs fresh data calls ensure_fresh(), which refetches only if the
 cache is more than LIVE_STALE_SECONDS old.
 
-rapid-bus-kl only (see PLAN.md scope decision). ETA math ports the approach
-already validated in ../where-bus's TransitService/LiveTrackingService/
-EtaCalculationService: nearest-stop GPS snapping onto a cumulative-distance
-table built from the route's shape polyline, not true polyline projection.
+Two Prasarana categories: rapid-bus-kl and rapid-bus-mrtfeeder, loaded into
+the same combined tables (last-category-wins on a colliding stop/route id,
+same as where-bus). ETA math ports the approach already validated in
+../where-bus's TransitService/LiveTrackingService/EtaCalculationService:
+nearest-stop GPS snapping onto a cumulative-distance table built from the
+route's shape polyline, not true polyline projection — except where the feed
+itself provides shape_dist_traveled (mrtfeeder does, kl doesn't), which is
+used directly instead of being re-derived.
 """
 
 from __future__ import annotations
@@ -33,16 +37,27 @@ from google.transit import gtfs_realtime_pb2
 from . import store
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE_DIR = ROOT / ".gtfs_cache" / "rapid-bus-kl"
 ALIASES_FILE = ROOT / "data" / "aliases.json"
-STATIC_URL = "https://api.data.gov.my/gtfs-static/prasarana?category=rapid-bus-kl"
-RT_URL = "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl"
+CATEGORIES = ["rapid-bus-kl", "rapid-bus-mrtfeeder"]
+STATIC_URL_TMPL = "https://api.data.gov.my/gtfs-static/prasarana?category={category}"
+RT_URL_TMPL = "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category={category}"
+
+
+def _cache_dir(category: str) -> Path:
+    return ROOT / ".gtfs_cache" / category
+
 
 KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 SERVICE_START_HOUR = 6
 SERVICE_END_HOUR = 23  # last hour of the day RapidKL still runs
 
-LIVE_STALE_SECONDS = 30
+# data.gov.my allows 4 requests/minute total, shared across both realtime
+# feeds (and anything else on the same network hitting their API). Two
+# feeds fetched together every LIVE_STALE_SECONDS must stay under that, with
+# margin — this app has no scheduler thread, so "every 45s" only happens
+# while something is actively polling /api/events.
+LIVE_STALE_SECONDS = 45
+RT_BACKOFF_SECONDS = 90  # default skip window after a feed 429s
 ETA_HISTORY_SIZE = 3  # rolling average window, same as where-bus
 MAX_ETA_SECONDS = 35 * 60
 ARRIVING_METERS = 150.0
@@ -163,20 +178,21 @@ def _soundex(word: str) -> str:
 # --------------------------------------------------------------- static load
 
 
-def _download_static() -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    resp = httpx.get(STATIC_URL, timeout=30, follow_redirects=True)
+def _download_static(category: str) -> None:
+    cache_dir = _cache_dir(category)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    resp = httpx.get(STATIC_URL_TMPL.format(category=category), timeout=30, follow_redirects=True)
     resp.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-        zf.extractall(CACHE_DIR)
+        zf.extractall(cache_dir)
 
 
-def _read_csv(name: str) -> csv.DictReader:
-    return csv.DictReader((CACHE_DIR / name).open(encoding="utf-8-sig"))
+def _read_csv(category: str, name: str) -> csv.DictReader:
+    return csv.DictReader((_cache_dir(category) / name).open(encoding="utf-8-sig"))
 
 
-def _load_stops() -> None:
-    for row in _read_csv("stops.txt"):
+def _load_stops(category: str) -> None:
+    for row in _read_csv(category, "stops.txt"):
         _stops[row["stop_id"]] = {
             "name": row["stop_name"].strip(),
             "lat": float(row["stop_lat"]),
@@ -184,28 +200,38 @@ def _load_stops() -> None:
         }
 
 
-def _load_routes() -> None:
-    for row in _read_csv("routes.txt"):
+def _load_routes(category: str) -> None:
+    for row in _read_csv(category, "routes.txt"):
         short_name = row["route_short_name"].strip() or row["route_long_name"].strip()
         _routes[row["route_id"]] = {"short_name": short_name, "long_name": row["route_long_name"].strip()}
         _short_name_to_route_id.setdefault(short_name, row["route_id"])
 
 
-def _load_shapes() -> dict[str, list[tuple[float, float, float]]]:
-    """shape_id -> ordered [(lat, lon, cumulative_km), ...]."""
-    raw: dict[str, list[tuple[float, float, float]]] = {}
-    for row in _read_csv("shapes.txt"):
-        raw.setdefault(row["shape_id"], []).append(
-            (float(row["shape_pt_sequence"]), float(row["shape_pt_lat"]), float(row["shape_pt_lon"]))
-        )
+def _load_shapes(category: str) -> dict[str, list[tuple[float, float, float]]]:
+    """shape_id -> ordered [(lat, lon, cumulative_km), ...].
+
+    Uses the feed's own shape_dist_traveled when present (mrtfeeder) instead
+    of re-deriving it from point-to-point haversine (kl, which omits it).
+    """
+    raw: dict[str, list[tuple[float, float, float, float]]] = {}
+    for row in _read_csv(category, "shapes.txt"):
+        dist = row.get("shape_dist_traveled", "").strip()
+        raw.setdefault(row["shape_id"], []).append((
+            float(row["shape_pt_sequence"]),
+            float(row["shape_pt_lat"]),
+            float(row["shape_pt_lon"]),
+            float(dist) if dist else -1.0,
+        ))
 
     polylines: dict[str, list[tuple[float, float, float]]] = {}
     for shape_id, points in raw.items():
         points.sort(key=lambda p: p[0])
         polyline: list[tuple[float, float, float]] = []
         cum = 0.0
-        for i, (_, lat, lon) in enumerate(points):
-            if i > 0:
+        for i, (_, lat, lon, dist) in enumerate(points):
+            if dist >= 0:
+                cum = dist
+            elif i > 0:
                 plat, plon, _ = polyline[i - 1]
                 cum += _haversine_km(plat, plon, lat, lon)
             polyline.append((lat, lon, cum))
@@ -213,11 +239,11 @@ def _load_shapes() -> dict[str, list[tuple[float, float, float]]]:
     return polylines
 
 
-def _representative_trips() -> dict[str, tuple[str, int, str]]:
+def _representative_trips(category: str) -> dict[str, tuple[str, int, str]]:
     """trip_id -> (route_id, direction_id, shape_id), one per route-direction."""
     seen: set[str] = set()
     trips: dict[str, tuple[str, int, str]] = {}
-    for row in _read_csv("trips.txt"):
+    for row in _read_csv(category, "trips.txt"):
         route_id = row["route_id"]
         direction_id = int(row["direction_id"] or 0)
         trip_id = row["trip_id"]
@@ -235,10 +261,14 @@ def _representative_trips() -> dict[str, tuple[str, int, str]]:
     return trips
 
 
-def _build_route_paths_and_distances(shapes: dict[str, list[tuple[float, float, float]]]) -> None:
-    target_trips = _representative_trips()
+def _build_route_paths_and_distances(category: str, shapes: dict[str, list[tuple[float, float, float]]]) -> None:
+    target_trips = _representative_trips(category)
 
-    for row in _read_csv("stop_times.txt"):
+    # Per-stop shape_dist_traveled, when stop_times.txt itself provides it
+    # (mrtfeeder) — more accurate than snapping to the nearest shape point.
+    stop_time_dist: dict[str, list[float]] = {}
+
+    for row in _read_csv(category, "stop_times.txt"):
         trip_id = row["trip_id"]
         if trip_id not in target_trips:
             continue
@@ -249,10 +279,18 @@ def _build_route_paths_and_distances(shapes: dict[str, list[tuple[float, float, 
         stop_id = row["stop_id"]
         if not path or path[-1] != stop_id:
             path.append(stop_id)
+            dist = row.get("shape_dist_traveled", "").strip()
+            if dist:
+                stop_time_dist.setdefault(path_key, []).append(float(dist))
 
     for trip_id, (route_id, direction_id, shape_id) in target_trips.items():
         path_key = f"{route_id}_{direction_id}"
-        _stop_cum_dist[path_key] = _project_stops_onto_shape(_route_paths[path_key], shapes.get(shape_id))
+        path = _route_paths[path_key]
+        distances = stop_time_dist.get(path_key)
+        if distances and len(distances) == len(path):
+            _stop_cum_dist[path_key] = distances
+        else:
+            _stop_cum_dist[path_key] = _project_stops_onto_shape(path, shapes.get(shape_id))
 
 
 def _project_stops_onto_shape(
@@ -323,13 +361,14 @@ def _load_static() -> None:
     global _loaded
     if _loaded:
         return
-    if not (CACHE_DIR / "stops.txt").exists():
-        _download_static()
+    for category in CATEGORIES:
+        if not (_cache_dir(category) / "stops.txt").exists():
+            _download_static(category)
+        _load_stops(category)
+        _load_routes(category)
+        shapes = _load_shapes(category)
+        _build_route_paths_and_distances(category, shapes)
 
-    _load_stops()
-    _load_routes()
-    shapes = _load_shapes()
-    _build_route_paths_and_distances(shapes)
     _build_stop_index()
     _build_stop_groups()
     _build_word_index()
@@ -510,6 +549,65 @@ def _resolve_route(route_text: str) -> str | None:
 _vehicles: dict[str, dict] = {}
 _last_fetch = 0.0
 _last_fetch_ok = False
+_rt_backoff_until: dict[str, float] = {}  # category -> epoch seconds to skip until
+
+
+def _resolve_broadcast_route_id(broadcast: str) -> str | None:
+    """The two feeds broadcast route_id differently: rapid-bus-kl sends the
+    internal GTFS route_id directly; rapid-bus-mrtfeeder sends the public
+    short name, sometimes with a direction word appended ("T155 Outbound").
+    Try all three readings rather than branch on which feed a vehicle came
+    from — either interpretation that resolves is correct."""
+    if broadcast in _routes:
+        return broadcast
+    if broadcast in _short_name_to_route_id:
+        return _short_name_to_route_id[broadcast]
+    first_word = broadcast.split(" ", 1)[0]
+    return _short_name_to_route_id.get(first_word)
+
+
+def _fetch_vehicles(category: str) -> bool:
+    """Returns True if this feed's vehicles were refreshed (fetched or
+    skipped-but-still-in-backoff-with-no-data-needed isn't success — only an
+    actual 200 counts)."""
+    url = RT_URL_TMPL.format(category=category)
+    try:
+        resp = httpx.get(url, timeout=10, follow_redirects=True)
+    except Exception:
+        return False
+
+    if resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After")
+        try:
+            backoff = float(retry_after) if retry_after else RT_BACKOFF_SECONDS
+        except ValueError:
+            backoff = RT_BACKOFF_SECONDS
+        _rt_backoff_until[category] = time.time() + backoff
+        return False
+    if resp.status_code >= 400:
+        return False
+
+    feed = gtfs_realtime_pb2.FeedMessage()
+    feed.ParseFromString(resp.content)
+    for entity in feed.entity:
+        if not entity.HasField("vehicle"):
+            continue
+        v = entity.vehicle
+        if not v.HasField("trip") or not v.trip.route_id:
+            continue
+        route_id = _resolve_broadcast_route_id(v.trip.route_id)
+        if route_id is None:
+            continue
+        trip_id = v.trip.trip_id
+        direction_id = v.trip.direction_id if v.trip.HasField("direction_id") else _trip_direction.get(trip_id, 0)
+        _vehicles[v.vehicle.id] = {
+            "route_id": route_id,
+            "direction_id": direction_id,
+            "lat": v.position.latitude,
+            "lon": v.position.longitude,
+            "speed_kmh": v.position.speed if v.position.HasField("speed") else None,
+        }
+    return True
 
 
 def ensure_fresh() -> None:
@@ -519,32 +617,14 @@ def ensure_fresh() -> None:
     if now - _last_fetch < LIVE_STALE_SECONDS:
         return
     _last_fetch = now
-    try:
-        resp = httpx.get(RT_URL, timeout=10, follow_redirects=True)
-        resp.raise_for_status()
-        feed = gtfs_realtime_pb2.FeedMessage()
-        feed.ParseFromString(resp.content)
-    except Exception:
-        _last_fetch_ok = False
-        store.check_alerts(_alert_arrivals)
-        return
 
-    _last_fetch_ok = True
-    for entity in feed.entity:
-        if not entity.HasField("vehicle"):
+    any_ok = False
+    for category in CATEGORIES:
+        if now < _rt_backoff_until.get(category, 0):
             continue
-        v = entity.vehicle
-        if not v.HasField("trip") or not v.trip.route_id:
-            continue
-        trip_id = v.trip.trip_id
-        direction_id = v.trip.direction_id if v.trip.HasField("direction_id") else _trip_direction.get(trip_id, 0)
-        _vehicles[v.vehicle.id] = {
-            "route_id": v.trip.route_id,
-            "direction_id": direction_id,
-            "lat": v.position.latitude,
-            "lon": v.position.longitude,
-            "speed_kmh": v.position.speed if v.position.HasField("speed") else None,
-        }
+        if _fetch_vehicles(category):
+            any_ok = True
+    _last_fetch_ok = any_ok
 
     store.check_alerts(_alert_arrivals)
 

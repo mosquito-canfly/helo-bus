@@ -29,6 +29,12 @@ TOTAL_CAP = 100  # AssemblyAI's hard limit
 MAX_LEN = 50  # AssemblyAI's per-keyterm length limit
 STOP_LIMIT = 80
 
+# Hand-written keyterms to always keep, independent of the GTFS ranking.
+# Fixed, not "whatever's currently in agent.json" — reading the live file
+# would make every rerun treat the previous run's own output as sacred
+# "existing" content, snowballing the stop/route split with each rerun.
+BASE_KEYTERMS = ["RapidKL", "KL Sentral", "Pasar Seni", "Mid Valley", "next bus", "arrival", "platform"]
+
 
 def _dedup_case_insensitive(items: list[str]) -> list[str]:
     seen: set[str] = set()
@@ -44,13 +50,12 @@ def _dedup_case_insensitive(items: list[str]) -> list[str]:
 
 def main() -> None:
     definition = json.loads(AGENT_JSON.read_text(encoding="utf-8"))
-    existing = definition.get("keyterms", [])
 
     stop_names = [n for n in gtfs.top_stop_names(STOP_LIMIT) if len(n) <= MAX_LEN]
     route_names = [n for n in gtfs.top_route_short_names() if len(n) <= MAX_LEN]
 
-    combined = _dedup_case_insensitive(existing + stop_names + route_names)
-    routes_included = max(0, min(len(route_names), TOTAL_CAP - len(_dedup_case_insensitive(existing + stop_names))))
+    combined = _dedup_case_insensitive(BASE_KEYTERMS + stop_names + route_names)
+    routes_included = max(0, min(len(route_names), TOTAL_CAP - len(_dedup_case_insensitive(BASE_KEYTERMS + stop_names))))
     keyterms = combined[:TOTAL_CAP]
 
     definition["keyterms"] = keyterms
