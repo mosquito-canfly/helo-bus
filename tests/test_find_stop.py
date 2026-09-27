@@ -65,6 +65,15 @@ class FindStopTests(unittest.TestCase):
         self.assertFalse(result["ok"], result)
         self.assertNotIn("candidates", result)
 
+    def test_faculty_of_computer_science_translation(self):
+        # Regression: "of" is a real word (part of "Commission OF India"),
+        # which used to block the word-intersection down to nothing and
+        # fall back to a noisy union across every meaning of every word.
+        result = gtfs.find_stop("Faculty of Computer Science")
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result.get("ambiguous"), result)
+        self.assertTrue(all("Komputer" in c for c in result["candidates"]), result)
+
 
 if __name__ == "__main__":
     unittest.main()

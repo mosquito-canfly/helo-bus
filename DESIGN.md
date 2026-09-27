@@ -353,7 +353,7 @@ Icon-pill buttons (dark-mode toggle, cancel, close) run ~40–44px including pad
 - Keep the sheet/sidebar as one component with two anchor states, not two separately-designed panels that happen to show the same data.
 
 ### Don't
-- **Don't use red anywhere except the live-call status badge.** Not the header icon, not the call button, not a route badge, not the alert banner — those are black/white/grey only. Genuine errors (`{colors.danger-*}`) are the one other colour role that survives, since that's an accessibility signal, not decoration.
+- **Don't use red anywhere except the live-call status badge — no exceptions.** Not the header icon, not the call button, not a route badge, not the alert banner, and not a "not found" or "did you mean" recovery card either — those are the agent asking a normal follow-up question, not a failure, and get a neutral grey treatment. `{colors.danger-*}` is where-bus's own reference token for a genuine error state; this build doesn't have a surfaced hard-failure state distinct enough to earn it, so it stays unused.
 - Don't introduce a third "status" colour beyond live-red and error-red — a warning state reuses neutral gray + copy, not a new hue.
 - Don't put a route's category colour on a chip's *background* — the chip is always neutral; only the icon glyph or badge text carries the colour.
 - Don't reach for `{rounded.md}`/`{rounded.lg}` (8–12px) as a primary card shape — those sizes aren't part of this system's working vocabulary even though the token exists; every real card is `{rounded.xl}` or bigger.

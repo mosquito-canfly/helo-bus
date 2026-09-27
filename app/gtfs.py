@@ -100,6 +100,10 @@ ABBREVIATIONS = {
     "street": "jalan",
     "bridge": "jambatan",
     "national": "negara",
+    "faculty": "fakulti",
+    "computer": "komputer",
+    "science": "sains",
+    "engineering": "kejuruteraan",
     "new": "baru",
     "old": "lama",
 }
@@ -409,6 +413,15 @@ def _speak_list(items: list[str]) -> str:
     return ", ".join(items[:-1]) + f" or {items[-1]}"
 
 
+# Connector words dropped before matching — not because they're rare, but
+# because a couple of them are, coincidentally, real substrings of a few
+# stop names ("Commission OF India", "Universiti OF Cyberjaya"). Treating
+# "of" as a "real match" for "Faculty OF Computer Science" then blocked the
+# intersection down to nothing and fell back to a noisy union across every
+# meaning of every word instead of the one stop that has all three.
+_STOPWORDS = {"of", "the", "a", "an", "at", "in", "near", "is", "to"}
+
+
 def _word_candidates(normalized_query: str) -> list[StopGroup]:
     """Order-independent word match.
 
@@ -419,7 +432,7 @@ def _word_candidates(normalized_query: str) -> list[StopGroup]:
     must never mix noise groups in next to a real match, so multi-word
     queries use only the words that hit exactly, never the fuzzy fallback.
     """
-    words = normalized_query.split()
+    words = [w for w in normalized_query.split() if w not in _STOPWORDS]
     if not words:
         return []
 
@@ -429,8 +442,12 @@ def _word_candidates(normalized_query: str) -> list[StopGroup]:
     if recognized > 0:
         if recognized <= len(words) / 2:
             return []  # most of the query is noise; let a lower-confidence tier handle it
+        # Intersect whichever words DID match something real (ignoring an
+        # unmatched stopword like "of" rather than letting it block the
+        # intersection entirely) — falls back to the union only when even
+        # that narrower intersection is empty.
         non_empty = [s for s in exact_sets if s]
-        all_match = set.intersection(*non_empty) if len(non_empty) == recognized else set()
+        all_match = set.intersection(*non_empty)
         keys = all_match or set.union(*non_empty)
         return [_groups_by_name[k] for k in keys]
 
