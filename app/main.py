@@ -9,7 +9,9 @@ inventing an answer.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -22,6 +24,8 @@ from starlette.responses import Response
 from . import gtfs, store
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+log = logging.getLogger("helo_bus.main")
 
 app = FastAPI(title="Helo Bus", version="1.0.0")
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,11 +34,16 @@ WEB_DIR = ROOT / "web"
 
 @app.middleware("http")
 async def record_tool_calls(request, call_next):
-    """Log every tool hit so the demo page can show AssemblyAI calling us."""
+    """Log every tool hit so the demo page can show AssemblyAI calling us —
+    and how long it took, since a tool call that's slow enough to hit
+    AssemblyAI's own timeout never gets this far to log its response."""
     if not request.url.path.startswith("/tools/"):
         return await call_next(request)
+    start = time.time()
     body = await request.body()
     response = await call_next(request)
+    elapsed = time.time() - start
+    log.info("tool call %s: %.2fs", request.url.path, elapsed)
     payload = b"".join([chunk async for chunk in response.body_iterator])
     store.log_event(request.url.path, body, payload)
     return Response(

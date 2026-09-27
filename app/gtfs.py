@@ -21,11 +21,13 @@ import csv
 import difflib
 import io
 import json
+import logging
 import re
 import threading
 import time
 import zipfile
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import atan2, cos, radians, sin, sqrt
@@ -34,6 +36,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from google.transit import gtfs_realtime_pb2
+
+log = logging.getLogger("helo_bus.gtfs")
 
 from . import store
 
@@ -61,6 +65,7 @@ SERVICE_END_HOUR = 23  # last hour of the day RapidKL still runs
 # while something is actively polling /api/events.
 LIVE_STALE_SECONDS = 45
 RT_BACKOFF_SECONDS = 90  # default skip window after a feed 429s
+GTFS_RT_TIMEOUT = 3.0  # a tool call has a ~4s total budget; this must fit under it
 ETA_HISTORY_SIZE = 3  # rolling average window, same as where-bus
 MAX_ETA_SECONDS = 35 * 60
 ARRIVING_METERS = 150.0
@@ -695,8 +700,7 @@ def _resolve_route(route_text: str) -> str | None:
 # ------------------------------------------------------------- live polling
 
 _vehicles: dict[str, dict] = {}
-_last_fetch = 0.0
-_last_fetch_ok = False
+_last_fetch: dict[str, float] = {}  # category -> epoch seconds of its last fetch attempt
 _rt_backoff_until: dict[str, float] = {}  # category -> epoch seconds to skip until
 _category_ok: dict[str, bool] = {}  # category -> did its most recent fetch attempt succeed
 _fetch_lock = threading.Lock()
@@ -721,10 +725,13 @@ def _fetch_vehicles(category: str) -> bool:
     skipped-but-still-in-backoff-with-no-data-needed isn't success — only an
     actual 200 counts)."""
     url = RT_URL_TMPL.format(category=category)
+    start = time.time()
     try:
-        resp = httpx.get(url, timeout=10, follow_redirects=True)
-    except Exception:
+        resp = httpx.get(url, timeout=GTFS_RT_TIMEOUT, follow_redirects=True)
+    except Exception as exc:
+        log.info("rt fetch %s: FAILED after %.2fs (%s)", category, time.time() - start, exc)
         return False
+    log.info("rt fetch %s: status=%s in %.2fs", category, resp.status_code, time.time() - start)
 
     if resp.status_code == 429:
         retry_after = resp.headers.get("Retry-After")
@@ -780,38 +787,44 @@ def _evict_stale_vehicles() -> None:
         del _eta_history[key]
 
 
-def ensure_fresh() -> None:
-    """Refetch if the cache is stale, blocking the caller until it's done —
-    next_arrivals/plan_trip must never read _vehicles mid-fetch. Concurrent
-    callers (the frontend's /api/events poll and a live tool call routinely
-    land within milliseconds of each other) serialize on _fetch_lock instead
-    of racing: a duplicate fetch here risks tripping data.gov.my's shared
-    4-requests/minute limit for no benefit, since one fetch already refreshes
-    the cache both callers read from."""
-    global _last_fetch, _last_fetch_ok
+def ensure_fresh(categories: set[str] | None = None) -> None:
+    """Refetch only the categories that are actually stale, without ever
+    blocking a tool call on data.gov.my being slow: the lock is a try, not a
+    wait — if a refresh is already running (the /api/events poller or
+    another tool call), this returns immediately and the caller answers
+    from whatever's cached, per-category truth about what's actually fresh
+    is _category_has_data's job, not this function's. Needed categories are
+    fetched in parallel with a short per-request timeout (GTFS_RT_TIMEOUT),
+    so even a full cold-start refresh stays well under a tool call's ~4s
+    budget. `categories=None` (the /api/events poller's default) means
+    "keep everything warm"; a tool call passes just what it needs so it
+    never pays for a feed it didn't ask about."""
     _load_static()
+    wanted = categories if categories is not None else set(CATEGORIES)
     now = time.time()
-    if now - _last_fetch < LIVE_STALE_SECONDS:
+    stale = [c for c in wanted if now - _last_fetch.get(c, 0) >= LIVE_STALE_SECONDS and now >= _rt_backoff_until.get(c, 0)]
+    if not stale:
         return
-    if not _fetch_lock.acquire(timeout=5):
-        return  # someone else is stuck fetching; answer from whatever's cached
+
+    if not _fetch_lock.acquire(blocking=False):
+        log.info("ensure_fresh: lock busy, using cache for %s", stale)
+        return  # someone else is already refreshing; never wait on it
+
     try:
         now = time.time()
-        if now - _last_fetch < LIVE_STALE_SECONDS:
-            return  # a concurrent caller already refreshed while we waited
-        _last_fetch = now
+        stale = [c for c in stale if now - _last_fetch.get(c, 0) >= LIVE_STALE_SECONDS]
+        if not stale:
+            return  # refreshed by the time we got the lock
 
-        any_ok = False
-        for category in CATEGORIES:
-            if now < _rt_backoff_until.get(category, 0):
-                continue
-            ok = _fetch_vehicles(category)
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=len(stale)) as pool:
+            oks = list(pool.map(_fetch_vehicles, stale))
+        for category, ok in zip(stale, oks):
+            _last_fetch[category] = time.time()
             _category_ok[category] = ok
-            any_ok = any_ok or ok
-        _last_fetch_ok = any_ok
         _evict_stale_vehicles()
-
         store.check_alerts(_alert_arrivals)
+        log.info("ensure_fresh: fetched %s in %.2fs", stale, time.time() - t0)
     finally:
         _fetch_lock.release()
 
@@ -826,6 +839,17 @@ def _category_has_data(category: str) -> bool:
     if _category_ok.get(category):
         return True
     return any(_routes.get(v["route_id"], {}).get("category") == category for v in _vehicles.values())
+
+
+def _is_stale(categories: set[str]) -> bool:
+    """True if none of these categories' most recent fetch attempt actually
+    succeeded — any arrivals built from them are from an earlier round, not
+    confirmed fresh just now. Callers with usable-but-stale data say so
+    rather than silently presenting old positions as current."""
+    return not any(_category_ok.get(c) for c in categories)
+
+
+STALE_CAVEAT = " (Bus positions are a bit delayed reaching me, so that's approximate.)"
 
 
 def _live_data_error(categories: set[str], within_hours: bool, next_start: str) -> dict | None:
@@ -992,9 +1016,9 @@ def next_arrivals(stop_text: str, route_text: str | None = None) -> dict:
         }
 
     within_hours, next_start = _service_window()
-    ensure_fresh()
-
     categories_needed = {_routes.get(r_id, {}).get("category") for r_id, _, _ in candidates}
+    ensure_fresh(categories_needed)
+
     error = _live_data_error(categories_needed, within_hours, next_start)
     if error:
         return error
@@ -1014,7 +1038,8 @@ def next_arrivals(stop_text: str, route_text: str | None = None) -> dict:
     arrivals.sort(key=lambda a: a["eta_seconds"])
     arrivals = arrivals[:4]
     spoken = ", ".join(f"Route {a['route']} in {a['eta_human']}" for a in arrivals)
-    return {"ok": True, "stop": group.name, "arrivals": arrivals, "message": f"At {group.name}: {spoken}."}
+    caveat = STALE_CAVEAT if _is_stale(categories_needed) else ""
+    return {"ok": True, "stop": group.name, "arrivals": arrivals, "message": f"At {group.name}: {spoken}.{caveat}"}
 
 
 # ------------------------------------------------------------------- trips
@@ -1210,15 +1235,16 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
             ),
         }
 
-    any_bus_leg = any(step[0] == "bus" for steps in step_candidates for step in steps)
+    categories_needed = {
+        _routes.get(step[1], {}).get("category") for steps in step_candidates for step in steps if step[0] == "bus"
+    }
     feed_error = None
-    if any_bus_leg:
+    stale = False
+    if categories_needed:
         within_hours, next_start = _service_window()
-        ensure_fresh()
-        categories_needed = {
-            _routes.get(step[1], {}).get("category") for steps in step_candidates for step in steps if step[0] == "bus"
-        }
+        ensure_fresh(categories_needed)  # one shared fetch for every option, not one per option
         feed_error = _live_data_error(categories_needed, within_hours, next_start)
+        stale = _is_stale(categories_needed)
 
     resolved: list[list[dict]] = []
     for steps in step_candidates:
@@ -1252,6 +1278,8 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
     message = "Take " + phrases[0] + "."
     if len(phrases) > 1:
         message += " Or " + phrases[1] + "."
+    if stale:
+        message += STALE_CAVEAT
 
     return {
         "ok": True,
