@@ -7,7 +7,6 @@ const els = {
   status: document.getElementById("status"),
   transcript: document.getElementById("transcript"),
   calls: document.getElementById("calls"),
-  count: document.getElementById("call-count"),
   timer: document.getElementById("timer"),
   alertBanner: document.getElementById("alert-banner"),
   alertText: document.getElementById("alert-text"),
@@ -35,7 +34,6 @@ let scheduled = [];
 let eventCursor = 0;
 let pollTimer = null;
 let pending = [];
-let callTotal = 0;
 
 // ---------------------------------------------------------------- helpers
 
@@ -240,33 +238,71 @@ function renderArrivalCard(result) {
   return card;
 }
 
-// Same card shape as an arrival, one route badge/hero number/following list —
-// plan_trip's options are already {route, category, eta_human, ...}, so it
-// reuses bigEta and every arrival-card CSS class as-is.
-function renderTripCard(result) {
-  const [primary, ...rest] = result.options;
-  const category = primary.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
+// One row per leg (bus or rail), with a "Transfer" divider between legs —
+// plan_trip's rail-inclusive options are a {steps: [...]} sequence, not a
+// single arrival, so this is its own card shape rather than reusing
+// renderArrivalCard.
+function renderTripStep(step) {
+  const row = el("div", "trip-step");
+  if (step.mode === "bus") {
+    const category = step.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
+    row.append(el("span", `route-badge ${category}`, `Route ${step.route}`));
+    row.append(el("span", "trip-step-detail", `${step.board_at} → ${step.alight_at} · ${step.eta_human}`));
+  } else {
+    row.append(el("span", "route-badge rapid-bus-mrtfeeder", step.line));
+    const plural = step.stops !== 1 ? "s" : "";
+    row.append(el("span", "trip-step-detail", `toward ${step.direction} · ${step.stops} stop${plural} · ${step.to_station}`));
+  }
+  return row;
+}
 
+function renderTripSteps(steps) {
+  const wrap = el("div", "trip-steps");
+  steps.forEach((step, i) => {
+    if (i > 0) wrap.append(el("div", "trip-transfer", "Transfer"));
+    wrap.append(renderTripStep(step));
+  });
+  return wrap;
+}
+
+function renderTripCard(result) {
   const card = el("div", "arrival-card");
 
   const top = el("div", "arrival-top");
-  top.append(el("span", `route-badge ${category}`, `Route ${primary.route}`));
   top.append(el("span", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
   card.append(top);
 
-  const { num, unit } = bigEta(primary);
-  const hero = el("div", "arrival-hero");
-  hero.append(el("span", "arrival-num", num));
-  if (unit) hero.append(el("span", "arrival-unit", unit));
-  card.append(hero);
+  card.append(renderTripSteps(result.options[0].steps));
 
-  if (rest.length) {
-    const list = el("div", "arrival-following");
-    for (const opt of rest) list.append(el("span", null, `Or Route ${opt.route} · ${opt.eta_human}`));
-    card.append(list);
+  if (result.options.length > 1) {
+    const alt = el("div", "trip-alt");
+    alt.append(el("span", "block-note", "Or:"));
+    alt.append(renderTripSteps(result.options[1].steps));
+    card.append(alt);
   }
 
   return card;
+}
+
+// A rider doesn't care that this came from "next_arrivals" — they care what
+// stop or trip it's about. Falls back to a plain tool label when a result
+// has nothing more specific to show (get_now, a failed lookup with no stop).
+const TOOL_LABELS = {
+  next_arrivals: "Bus arrivals",
+  plan_trip: "Trip",
+  find_stop: "Stop lookup",
+  find_nearby_stops: "Nearby stops",
+  set_arrival_alert: "Arrival alert",
+  get_now: "Current time",
+};
+
+function friendlyTitle(event) {
+  const r = event.result || {};
+  if (event.tool === "next_arrivals" && r.stop) return r.stop;
+  if (event.tool === "plan_trip" && r.from_stop) return `${r.from_stop} → ${r.to_stop}`;
+  if (event.tool === "find_stop" && r.stop) return r.stop;
+  if (event.tool === "set_arrival_alert" && r.ok) return "Alert set";
+  return TOOL_LABELS[event.tool] || event.tool;
 }
 
 function renderCall(event) {
@@ -280,46 +316,48 @@ function renderCall(event) {
   card.dataset.seq = event.seq;
 
   const head = document.createElement("header");
-  const name = document.createElement("span");
-  name.className = "call-name";
-  name.textContent = event.tool;
-  const time = document.createElement("span");
-  time.className = "call-time";
-  time.textContent = event.at;
-  head.append(name, time);
+  head.append(el("span", "call-title", friendlyTitle(event)));
   card.append(head);
+
+  // Rider-facing first: the tool's own spoken message, plus a structured
+  // eta list when there's one to show.
+  const msg = document.createElement("p");
+  msg.className = "call-msg";
+  msg.textContent = (event.result && event.result.message) || "(no response)";
+  card.append(msg);
+
+  if (event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length) {
+    card.append(renderEtaList(event.result.arrivals));
+  } else if (event.result && Array.isArray(event.result.options) && event.result.options.length) {
+    card.append(renderTripSteps(event.result.options[0].steps));
+  }
+
+  // Judge-facing plumbing (tool name, raw query, timestamp, raw reason
+  // code) collapsed behind one toggle — visible on request, not by default.
+  const details = document.createElement("details");
+  details.className = "call-details";
+  details.append(el("summary", null, "Details"));
+
+  const meta = el("div", "call-meta");
+  meta.append(el("span", "call-name", event.tool), el("span", "call-time", event.at));
+  details.append(meta);
 
   const args = formatArgs(event.arguments);
   if (args) {
     const pre = document.createElement("pre");
     pre.className = "call-args";
     pre.textContent = args;
-    card.append(pre);
+    details.append(pre);
   }
 
   if (failed && event.result.reason) {
-    const reason = document.createElement("span");
-    reason.className = "call-reason";
-    reason.textContent = event.result.reason.replace(/_/g, " ");
-    card.append(reason);
+    details.append(el("span", "call-reason", event.result.reason.replace(/_/g, " ")));
   }
 
-  const msg = document.createElement("p");
-  msg.className = "call-msg";
-  msg.textContent = (event.result && event.result.message) || "(no message)";
-  card.append(msg);
-
-  if (event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length) {
-    card.append(renderEtaList(event.result.arrivals));
-  } else if (event.result && Array.isArray(event.result.options) && event.result.options.length) {
-    card.append(renderEtaList(event.result.options));
-  }
+  card.append(details);
 
   els.calls.append(card);
   els.calls.scrollTop = els.calls.scrollHeight;
-
-  callTotal += 1;
-  els.count.textContent = `${callTotal} call${callTotal === 1 ? "" : "s"}`;
 }
 
 function revealCall(seq) {

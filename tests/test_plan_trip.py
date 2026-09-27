@@ -1,8 +1,12 @@
-"""Regression tests for direct-route trip planning (app/gtfs.py plan_trip).
+"""Regression tests for trip planning (app/gtfs.py plan_trip), direct bus
+and rail-inclusive (LRT/MRT/Monorail/BRT, one transfer max).
 
-Only the pure route-matching logic (_direct_route_options) is tested here —
-the rest of plan_trip depends on the live vehicle-position feed, same reason
-next_arrivals itself has no test in this suite.
+DirectRouteOptionsTests exercises the pure route-matching logic
+(_direct_route_options) — no network. RailInclusiveTests calls the real
+plan_trip() for named real-world routes and only asserts that a STRUCTURAL
+route was found (reason != "no_direct_route"), not that a live bus ETA was
+available for it — the same reason next_arrivals itself has no test here;
+which specific buses are tracked live varies minute to minute.
 
 Run: python tests/test_plan_trip.py
 """
@@ -49,6 +53,23 @@ class DirectRouteOptionsTests(unittest.TestCase):
         result = gtfs.plan_trip(self.from_group.name, self.from_group.name)
         self.assertFalse(result["ok"], result)
         self.assertEqual(result["reason"], "same_stop")
+
+
+class RailInclusiveTests(unittest.TestCase):
+    def test_fakulti_sains_komputer_to_pasar_seni_finds_a_route(self):
+        # No direct bus between these two; only findable via the bus->rail
+        # fallback tier (a feeder to an MRT station, then the Kajang Line).
+        result = gtfs.plan_trip("Fakulti Sains Komputer", "Pasar Seni (Platform B5)")
+        self.assertNotEqual(result.get("reason"), "no_direct_route", result)
+
+    def test_kl_sentral_to_mid_valley_finds_a_route(self):
+        result = gtfs.plan_trip("KL Sentral", "Mid Valley (Selatan)")
+        self.assertNotEqual(result.get("reason"), "no_direct_route", result)
+
+    def test_unconnected_stops_report_no_direct_route(self):
+        result = gtfs.plan_trip("Bandar Kajang", "Taman Botani Putrajaya")
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["reason"], "no_direct_route")
 
 
 if __name__ == "__main__":

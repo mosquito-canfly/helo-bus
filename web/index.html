@@ -574,11 +574,33 @@
         box-shadow: var(--shadow-xl);
       }
 
-      .call header {
+      .call-title {
+        font-family: var(--font-sans);
+        font-size: var(--type-body-md-size);
+        font-weight: var(--type-body-md-weight);
+        color: var(--color-text-primary);
+      }
+
+      /* Rider info is the whole card by default; tool name, raw query and
+         timestamp are judge-facing plumbing, collapsed behind one toggle. */
+      .call-details {
+        margin-top: var(--space-sm);
+      }
+      .call-details summary {
+        cursor: pointer;
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        color: var(--color-text-muted);
+      }
+      .call-details summary:hover {
+        color: var(--color-text-primary);
+      }
+      .call-meta {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
         gap: var(--space-sm);
+        margin-top: var(--space-xs);
       }
       .call-name {
         font-family: var(--font-sans);
@@ -614,7 +636,8 @@
 
       .call-msg {
         margin: 0;
-        font-size: var(--type-caption-size);
+        font-size: var(--type-body-md-regular-size);
+        line-height: 1.5;
         color: var(--color-text-primary);
       }
 
@@ -739,6 +762,43 @@
       .arrival-following span {
         font-size: var(--type-caption-size);
         color: var(--color-text-secondary);
+      }
+
+      /* Step card for plan_trip's rail-inclusive options — one row per leg
+         (bus or rail), a small divider where the rider actually gets off
+         and switches, plus an abbreviated second option underneath. */
+      .trip-steps {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
+      .trip-step {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+      }
+      .trip-step-detail {
+        font-size: var(--type-body-md-regular-size);
+        color: var(--color-text-primary);
+      }
+      .trip-transfer {
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        padding-left: var(--space-xs);
+        border-left: 2px solid var(--color-border);
+        margin-left: 3px;
+      }
+      .trip-alt {
+        margin-top: var(--space-md);
+        padding-top: var(--space-md);
+        border-top: 1px solid var(--color-border-subtle);
+      }
+      .trip-alt .block-note {
+        margin: 0 0 var(--space-sm);
       }
 
       /* ------------------------------------------------------- control bar */
@@ -1243,7 +1303,7 @@
         </div>
       </div>
       <div class="top-actions">
-        <button id="tools-toggle" class="ghost" type="button" aria-expanded="false">How it works</button>
+        <button id="tools-toggle" class="ghost" type="button" aria-expanded="false">Live bus info</button>
         <button id="info-btn" class="ghost" type="button">Demo data</button>
         <span id="status" data-state="idle">Idle</span>
       </div>
@@ -1281,8 +1341,7 @@
 
       <section class="pane tools" id="tools-pane">
         <div class="pane-head">
-          <h2>How it works</h2>
-          <span class="count" id="call-count">0 calls</span>
+          <h2>Live bus info</h2>
         </div>
         <div class="scroll" id="calls">
           <p class="empty">
@@ -1325,6 +1384,6 @@
     <!-- Bump this query on every app.js edit — without it, browsers cache
          the old script indefinitely and a shipped fix can silently not run
          for returning visitors (this is why "How it works" looked broken). -->
-    <script src="/app.js?v=2"></script>
+    <script src="/app.js?v=4"></script>
   </body>
 </html>

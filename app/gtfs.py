@@ -22,6 +22,7 @@ import difflib
 import io
 import json
 import re
+import threading
 import time
 import zipfile
 from collections import deque
@@ -40,6 +41,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ALIASES_FILE = ROOT / "data" / "aliases.json"
 STATIC_FILE = ROOT / "data" / "static.json"
 CATEGORIES = ["rapid-bus-kl", "rapid-bus-mrtfeeder"]
+RAIL_CATEGORY = "rapid-rail-kl"  # LRT/MRT/Monorail/BRT — static only, no realtime feed here
 STATIC_URL_TMPL = "https://api.data.gov.my/gtfs-static/prasarana?category={category}"
 RT_URL_TMPL = "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category={category}"
 
@@ -126,6 +128,12 @@ class StopGroup:
     stop_ids: list[str] = field(default_factory=list)
 
 
+@dataclass
+class RailStationGroup:
+    name: str  # display name, e.g. "Masjid Jamek"
+    station_ids: list[str] = field(default_factory=list)  # one per line that serves it
+
+
 _stops: dict[str, dict] = {}  # stop_id -> {name, lat, lon}
 _routes: dict[str, dict] = {}  # route_id -> {short_name, long_name}
 _short_name_to_route_id: dict[str, str] = {}
@@ -139,6 +147,21 @@ _groups_by_name: dict[str, StopGroup] = {}  # normalised name -> group
 _word_to_groups: dict[str, set[str]] = {}  # normalised word -> {group keys}
 _word_soundex: dict[str, str] = {}  # normalised word -> soundex code
 _soundex_to_words: dict[str, set[str]] = {}  # soundex code -> {words}
+
+# Rail (LRT/MRT/Monorail/BRT): static only, kept in its own namespace so it
+# never touches the bus vehicle-tracking path — there's no realtime feed for
+# it here, so plan_trip only ever reports a rail leg's line/stops, never an
+# ETA (see DESIGN.md-adjacent note in plan_trip itself).
+_rail_stations: dict[str, dict] = {}  # station_id -> {name, lat, lon}
+_rail_routes: dict[str, dict] = {}  # line_id -> {short_name, long_name}
+_rail_paths: dict[str, list[str]] = {}  # "lineId_dir" -> ordered station_ids
+_rail_headsign: dict[str, str] = {}  # "lineId_dir" -> headsign, e.g. "From Ampang to Sentul Timur"
+_rail_groups_by_name: dict[str, RailStationGroup] = {}  # normalised name -> group
+_bus_to_rail: dict[str, list[str]] = {}  # bus StopGroup.name -> [nearby RailStationGroup.name]
+_rail_to_bus: dict[str, list[str]] = {}  # rail StationGroup.name -> [nearby bus StopGroup.name]
+_bus_group_by_display_name: dict[str, StopGroup] = {}  # StopGroup.name -> group, built at load time
+_rail_group_by_display_name: dict[str, RailStationGroup] = {}  # RailStationGroup.name -> group
+
 _loaded = False
 
 
@@ -336,6 +359,60 @@ def _build_stop_index() -> None:
             _stop_to_routes.setdefault(stop_id, []).append((route_id, int(direction_id)))
 
 
+def _load_rail_static() -> None:
+    """Build-time only, mirrors the bus loaders above but far simpler: rail
+    stop_times.txt has no shape_dist_traveled, and a rail leg never needs a
+    distance/ETA (no realtime feed) — only stop ORDER, which stop_sequence
+    already gives for free. So this skips shapes.txt entirely."""
+    if not (_cache_dir(RAIL_CATEGORY) / "stops.txt").exists():
+        _download_static(RAIL_CATEGORY)
+
+    for row in _read_csv(RAIL_CATEGORY, "stops.txt"):
+        _rail_stations[row["stop_id"]] = {
+            "name": row["stop_name"].strip(),
+            "lat": float(row["stop_lat"]),
+            "lon": float(row["stop_lon"]),
+        }
+    for row in _read_csv(RAIL_CATEGORY, "routes.txt"):
+        _rail_routes[row["route_id"]] = {
+            "short_name": row["route_short_name"].strip(),
+            "long_name": row["route_long_name"].strip(),
+        }
+
+    target_trips: dict[str, tuple[str, int]] = {}  # trip_id -> (route_id, direction_id)
+    seen_paths: set[str] = set()
+    for row in _read_csv(RAIL_CATEGORY, "trips.txt"):
+        route_id = row["route_id"]
+        direction_id = int(row["direction_id"] or 0)
+        path_key = f"{route_id}_{direction_id}"
+        headsign = row["trip_headsign"].strip()
+        if headsign:
+            _rail_headsign.setdefault(path_key, headsign)
+        if path_key in seen_paths:
+            continue
+        seen_paths.add(path_key)
+        target_trips[row["trip_id"]] = (route_id, direction_id)
+
+    stop_times: dict[str, list[tuple[int, str]]] = {}  # path_key -> [(sequence, stop_id)]
+    for row in _read_csv(RAIL_CATEGORY, "stop_times.txt"):
+        trip_id = row["trip_id"]
+        if trip_id not in target_trips:
+            continue
+        route_id, direction_id = target_trips[trip_id]
+        stop_times.setdefault(f"{route_id}_{direction_id}", []).append((int(row["stop_sequence"]), row["stop_id"]))
+
+    for path_key, rows in stop_times.items():
+        rows.sort(key=lambda r: r[0])
+        _rail_paths[path_key] = [stop_id for _, stop_id in rows]
+
+
+def _build_rail_station_groups() -> None:
+    for station_id, s in _rail_stations.items():
+        name = _normalize(s["name"])
+        group = _rail_groups_by_name.setdefault(name, RailStationGroup(name=_display_name(s["name"])))
+        group.station_ids.append(station_id)
+
+
 _VOWELS = set("aeiou")
 
 
@@ -398,6 +475,19 @@ def _load_static() -> None:
         _stop_to_routes[stop_id] = [tuple(pair) for pair in pairs]
     for group in data["groups"]:
         _groups_by_name[group["key"]] = StopGroup(name=group["name"], stop_ids=group["stop_ids"])
+
+    rail = data.get("rail", {})
+    for station_id, s in rail.get("stations", {}).items():
+        _rail_stations[station_id] = {"name": s["name"], "lat": s["lat"], "lon": s["lon"]}
+    _rail_routes.update(rail.get("routes", {}))
+    _rail_paths.update(rail.get("paths", {}))
+    _rail_headsign.update(rail.get("headsign", {}))
+    for group in rail.get("groups", []):
+        _rail_groups_by_name[group["key"]] = RailStationGroup(name=group["name"], station_ids=group["station_ids"])
+    _bus_to_rail.update(rail.get("bus_to_rail", {}))
+    _rail_to_bus.update(rail.get("rail_to_bus", {}))
+    _bus_group_by_display_name.update({g.name: g for g in _groups_by_name.values()})
+    _rail_group_by_display_name.update({g.name: g for g in _rail_groups_by_name.values()})
 
     _build_word_index()
     _load_aliases()
@@ -608,6 +698,8 @@ _vehicles: dict[str, dict] = {}
 _last_fetch = 0.0
 _last_fetch_ok = False
 _rt_backoff_until: dict[str, float] = {}  # category -> epoch seconds to skip until
+_category_ok: dict[str, bool] = {}  # category -> did its most recent fetch attempt succeed
+_fetch_lock = threading.Lock()
 
 
 def _resolve_broadcast_route_id(broadcast: str) -> str | None:
@@ -689,23 +781,69 @@ def _evict_stale_vehicles() -> None:
 
 
 def ensure_fresh() -> None:
+    """Refetch if the cache is stale, blocking the caller until it's done —
+    next_arrivals/plan_trip must never read _vehicles mid-fetch. Concurrent
+    callers (the frontend's /api/events poll and a live tool call routinely
+    land within milliseconds of each other) serialize on _fetch_lock instead
+    of racing: a duplicate fetch here risks tripping data.gov.my's shared
+    4-requests/minute limit for no benefit, since one fetch already refreshes
+    the cache both callers read from."""
     global _last_fetch, _last_fetch_ok
     _load_static()
     now = time.time()
     if now - _last_fetch < LIVE_STALE_SECONDS:
         return
-    _last_fetch = now
+    if not _fetch_lock.acquire(timeout=5):
+        return  # someone else is stuck fetching; answer from whatever's cached
+    try:
+        now = time.time()
+        if now - _last_fetch < LIVE_STALE_SECONDS:
+            return  # a concurrent caller already refreshed while we waited
+        _last_fetch = now
 
-    any_ok = False
-    for category in CATEGORIES:
-        if now < _rt_backoff_until.get(category, 0):
-            continue
-        if _fetch_vehicles(category):
-            any_ok = True
-    _last_fetch_ok = any_ok
-    _evict_stale_vehicles()
+        any_ok = False
+        for category in CATEGORIES:
+            if now < _rt_backoff_until.get(category, 0):
+                continue
+            ok = _fetch_vehicles(category)
+            _category_ok[category] = ok
+            any_ok = any_ok or ok
+        _last_fetch_ok = any_ok
+        _evict_stale_vehicles()
 
-    store.check_alerts(_alert_arrivals)
+        store.check_alerts(_alert_arrivals)
+    finally:
+        _fetch_lock.release()
+
+
+def _category_has_data(category: str) -> bool:
+    """A category is usable if its latest fetch succeeded, or if vehicles
+    from an earlier success are still cached (eviction already bounds how
+    stale those can be — see STALE_VEHICLE_SECONDS). This is what "fresh"
+    actually means per query: one feed succeeding must not mask the other
+    one failing when the caller only asked about a route on the failing
+    feed — that's the bug 'no buses nearby' vs 'feed unavailable' was."""
+    if _category_ok.get(category):
+        return True
+    return any(_routes.get(v["route_id"], {}).get("category") == category for v in _vehicles.values())
+
+
+def _live_data_error(categories: set[str], within_hours: bool, next_start: str) -> dict | None:
+    """None if live data for these categories is usable; otherwise the
+    ok=false payload to return as-is."""
+    if not within_hours and not _vehicles:
+        return {
+            "ok": False,
+            "reason": "no_service_night",
+            "message": f"RapidKL isn't running right now. Services start again around {next_start}.",
+        }
+    if not any(_category_has_data(c) for c in categories):
+        return {
+            "ok": False,
+            "reason": "feed_unavailable",
+            "message": "I can't reach live bus positions right now. Try again in a moment.",
+        }
+    return None
 
 
 # --------------------------------------------------------------- ETA engine
@@ -856,19 +994,10 @@ def next_arrivals(stop_text: str, route_text: str | None = None) -> dict:
     within_hours, next_start = _service_window()
     ensure_fresh()
 
-    if not within_hours and not _vehicles:
-        return {
-            "ok": False,
-            "reason": "no_service_night",
-            "message": f"RapidKL isn't running right now. Services start again around {next_start}.",
-        }
-
-    if not _last_fetch_ok and not _vehicles:
-        return {
-            "ok": False,
-            "reason": "feed_unavailable",
-            "message": "I can't reach live bus positions right now. Try again in a moment.",
-        }
+    categories_needed = {_routes.get(r_id, {}).get("category") for r_id, _, _ in candidates}
+    error = _live_data_error(categories_needed, within_hours, next_start)
+    if error:
+        return error
 
     arrivals: list[dict] = []
     for r_id, direction_id, stop_id in candidates:
@@ -912,11 +1041,148 @@ def _direct_route_options(from_group: StopGroup, to_group: StopGroup) -> list[tu
     return options
 
 
+def _rail_direct_options(from_group: RailStationGroup, to_group: RailStationGroup) -> list[tuple[str, int, int, int]]:
+    """Same idea as _direct_route_options but over the rail network's own
+    static station order: every line-direction serving from_group before
+    to_group, as (line_id, direction_id, board_index, alight_index)."""
+    from_ids = set(from_group.station_ids)
+    to_ids = set(to_group.station_ids)
+    options: list[tuple[str, int, int, int]] = []
+    for path_key, path in _rail_paths.items():
+        board_idx = None
+        for i, station_id in enumerate(path):
+            if board_idx is None:
+                if station_id in from_ids:
+                    board_idx = i
+                continue
+            if station_id in to_ids:
+                line_id, direction_id = path_key.rsplit("_", 1)
+                options.append((line_id, int(direction_id), board_idx, i))
+                break
+    return options
+
+
+def _linked_rail_groups(bus_group: StopGroup) -> list[RailStationGroup]:
+    names = _bus_to_rail.get(bus_group.name, [])
+    return [_rail_group_by_display_name[n] for n in names if n in _rail_group_by_display_name]
+
+
+_RAIL_PREFIX_RE = re.compile(r"^(LRT|MRT|BRT)\s+")
+
+
+def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int, from_name: str, to_name: str) -> dict:
+    path_key = f"{line_id}_{direction_id}"
+    line = _rail_routes.get(line_id, {})
+    line_name = _RAIL_PREFIX_RE.sub("", line.get("long_name") or line.get("short_name", line_id))
+    headsign = _rail_headsign.get(path_key, "")
+    terminal = headsign.rsplit(" to ", 1)[-1].strip() if " to " in headsign else line_name
+    return {
+        "mode": "rail",
+        "line": line_name,
+        "direction": terminal,
+        "from_station": from_name,
+        "to_station": to_name,
+        "stops": alight_idx - board_idx,
+    }
+
+
+def _bus_step(route_id: str, direction_id: int, board_stop_id: str, board_name: str, alight_name: str) -> dict | None:
+    """None if no live vehicle can back up this leg with an ETA — the
+    caller drops the whole option rather than announce a boarding time it
+    doesn't have."""
+    short_name = _routes.get(route_id, {}).get("short_name", route_id)
+    arrivals = _arrivals_for(route_id, direction_id, board_stop_id, short_name)
+    if not arrivals:
+        return None
+    best = min(arrivals, key=lambda a: a["eta_seconds"])
+    return {
+        "mode": "bus",
+        "route": best["route"],
+        "category": best["category"],
+        "board_at": board_name,
+        "alight_at": alight_name,
+        "eta_seconds": best["eta_seconds"],
+        "eta_human": best["eta_human"],
+    }
+
+
+def _rail_inclusive_options(from_group: StopGroup, to_group: StopGroup) -> list[list[tuple]]:
+    """Fallback tier for plan_trip, only tried when direct bus alone can't
+    fill 2 options: rail-only (both ends within walking distance/name match
+    of a station) and one-transfer bus<->rail combos. Returns structural
+    step-candidates — (mode, ...) tuples, not yet live-checked; the caller
+    resolves each bus leg to a real ETA and drops any option that fails."""
+    from_rail = _linked_rail_groups(from_group)
+    to_rail = _linked_rail_groups(to_group)
+    results: list[list[tuple]] = []
+
+    for fr in from_rail:
+        for tr in to_rail:
+            for line_id, direction_id, board_idx, alight_idx in _rail_direct_options(fr, tr):
+                results.append([("rail", line_id, direction_id, board_idx, alight_idx, fr.name, tr.name)])
+
+    # bus -> rail: direct bus from from_group to a stop near some station,
+    # then that station's line toward one near to_group.
+    if to_rail:
+        for rail_name, bus_names in _rail_to_bus.items():
+            station_group = _rail_group_by_display_name.get(rail_name)
+            if station_group is None:
+                continue
+            for bus_name in bus_names:
+                transfer_group = _bus_group_by_display_name.get(bus_name)
+                if transfer_group is None or transfer_group.name in (from_group.name, to_group.name):
+                    continue
+                bus_legs = _direct_route_options(from_group, transfer_group)
+                if not bus_legs:
+                    continue
+                route_id, direction_id, board_stop_id = bus_legs[0]
+                for tr in to_rail:
+                    for line_id, r_dir, board_idx, alight_idx in _rail_direct_options(station_group, tr):
+                        results.append([
+                            ("bus", route_id, direction_id, board_stop_id, from_group.name, transfer_group.name),
+                            ("rail", line_id, r_dir, board_idx, alight_idx, station_group.name, tr.name),
+                        ])
+                break  # one transfer candidate at this station is enough
+
+    # rail -> bus: symmetric.
+    if from_rail:
+        for rail_name, bus_names in _rail_to_bus.items():
+            station_group = _rail_group_by_display_name.get(rail_name)
+            if station_group is None:
+                continue
+            for bus_name in bus_names:
+                transfer_group = _bus_group_by_display_name.get(bus_name)
+                if transfer_group is None or transfer_group.name in (from_group.name, to_group.name):
+                    continue
+                bus_legs = _direct_route_options(transfer_group, to_group)
+                if not bus_legs:
+                    continue
+                route_id, direction_id, board_stop_id = bus_legs[0]
+                for fr in from_rail:
+                    for line_id, r_dir, board_idx, alight_idx in _rail_direct_options(fr, station_group):
+                        results.append([
+                            ("rail", line_id, r_dir, board_idx, alight_idx, fr.name, station_group.name),
+                            ("bus", route_id, direction_id, board_stop_id, transfer_group.name, to_group.name),
+                        ])
+                break
+
+    return results
+
+
+def _step_phrase(step: dict) -> str:
+    if step["mode"] == "bus":
+        return f"Route {step['route']} from {step['board_at']} to {step['alight_at']}, next one in {step['eta_human']}"
+    plural = "s" if step["stops"] != 1 else ""
+    return f"the {step['line']} toward {step['direction']}, {step['stops']} stop{plural} to {step['to_station']}"
+
+
 def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
-    """Direct-route only: does any single route pass from_stop then
-    to_stop. No multi-transfer search — a bus network this size mostly
-    doesn't need one, and a wrong transfer plan is worse than admitting
-    there isn't a direct one and pointing at a bigger hub instead."""
+    """Direct bus first (one hop, no transfers). If that alone can't offer
+    2 options, falls back to one-transfer bus<->rail combos and rail-only
+    journeys (LRT/MRT/Monorail/BRT) using the same station-order idea, just
+    on the rail network's own static paths — no multi-transfer search here
+    either. A rail leg reports line/direction/stop-count only: there's no
+    realtime feed for rail in this app, so no rail ETA is ever invented."""
     _load_static()
     from_group, error = _resolve_group(from_stop_text)
     if error:
@@ -927,76 +1193,72 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
     if from_group.name == to_group.name:
         return {"ok": False, "reason": "same_stop", "message": f"You're already at {from_group.name}."}
 
-    options = _direct_route_options(from_group, to_group)
-    if not options:
+    step_candidates: list[list[tuple]] = [
+        [("bus", route_id, direction_id, board_stop_id, from_group.name, to_group.name)]
+        for route_id, direction_id, board_stop_id in _direct_route_options(from_group, to_group)
+    ]
+    if len(step_candidates) < 2:
+        step_candidates += _rail_inclusive_options(from_group, to_group)
+
+    if not step_candidates:
         return {
             "ok": False,
             "reason": "no_direct_route",
             "message": (
-                f"I don't see a direct bus from {from_group.name} to {to_group.name}. "
+                f"I don't see a direct bus or train from {from_group.name} to {to_group.name}. "
                 "Try checking arrivals at a bigger hub nearby instead."
             ),
         }
 
-    within_hours, next_start = _service_window()
-    ensure_fresh()
-
-    if not within_hours and not _vehicles:
-        return {
-            "ok": False,
-            "reason": "no_service_night",
-            "message": f"RapidKL isn't running right now. Services start again around {next_start}.",
+    any_bus_leg = any(step[0] == "bus" for steps in step_candidates for step in steps)
+    feed_error = None
+    if any_bus_leg:
+        within_hours, next_start = _service_window()
+        ensure_fresh()
+        categories_needed = {
+            _routes.get(step[1], {}).get("category") for steps in step_candidates for step in steps if step[0] == "bus"
         }
+        feed_error = _live_data_error(categories_needed, within_hours, next_start)
 
-    if not _last_fetch_ok and not _vehicles:
-        return {
-            "ok": False,
-            "reason": "feed_unavailable",
-            "message": "I can't reach live bus positions right now. Try again in a moment.",
-        }
+    resolved: list[list[dict]] = []
+    for steps in step_candidates:
+        resolved_steps: list[dict] | None = []
+        for step in steps:
+            if step[0] == "bus":
+                _, route_id, direction_id, board_stop_id, board_name, alight_name = step
+                bus_step = _bus_step(route_id, direction_id, board_stop_id, board_name, alight_name)
+                if bus_step is None:
+                    resolved_steps = None
+                    break
+                resolved_steps.append(bus_step)
+            else:
+                _, line_id, r_dir, board_idx, alight_idx, from_name, to_name = step
+                resolved_steps.append(_rail_step(line_id, r_dir, board_idx, alight_idx, from_name, to_name))
+        if resolved_steps:
+            resolved.append(resolved_steps)
+        if len(resolved) >= 2:
+            break
 
-    # Soonest ETA per route, ignoring a route that qualified via more than
-    # one direction/board stop (rare loop routes).
-    best_by_route: dict[str, dict] = {}
-    for route_id, direction_id, board_stop_id in options:
-        short_name = _routes.get(route_id, {}).get("short_name", route_id)
-        arrivals = _arrivals_for(route_id, direction_id, board_stop_id, short_name)
-        if not arrivals:
-            continue
-        best = min(arrivals, key=lambda a: a["eta_seconds"])
-        current = best_by_route.get(route_id)
-        if current is None or best["eta_seconds"] < current["eta_seconds"]:
-            best_by_route[route_id] = best
-
-    if not best_by_route:
-        routes = _speak_list(sorted({_routes.get(r, {}).get("short_name", r) for r, _, _ in options}))
+    if not resolved:
+        if feed_error:
+            return feed_error
         return {
             "ok": False,
             "reason": "no_buses_nearby",
-            "message": f"Route {routes} runs there directly, but no buses are close enough to {from_group.name} right now for an ETA.",
+            "message": f"There's a route, but no buses are close enough to {from_group.name} right now for an ETA.",
         }
 
-    picks = sorted(best_by_route.values(), key=lambda a: a["eta_seconds"])[:2]
-    if len(picks) == 1:
-        spoken = f"Route {picks[0]['route']} in {picks[0]['eta_human']}"
-    else:
-        spoken = f"Route {picks[0]['route']} in {picks[0]['eta_human']}, or Route {picks[1]['route']} in {picks[1]['eta_human']}"
+    phrases = [", then ".join(_step_phrase(s) for s in steps) for steps in resolved]
+    message = "Take " + phrases[0] + "."
+    if len(phrases) > 1:
+        message += " Or " + phrases[1] + "."
 
     return {
         "ok": True,
         "from_stop": from_group.name,
         "to_stop": to_group.name,
-        "options": [
-            {
-                "route": a["route"],
-                "category": a["category"],
-                "board_at": from_group.name,
-                "eta_seconds": a["eta_seconds"],
-                "eta_human": a["eta_human"],
-            }
-            for a in picks
-        ],
-        "message": f"Take {spoken} from {from_group.name} to get to {to_group.name}.",
+        "options": [{"steps": steps} for steps in resolved],
+        "message": message,
     }
 
 
