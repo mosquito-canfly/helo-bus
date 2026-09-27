@@ -268,6 +268,10 @@
         display: flex;
       }
 
+      .tools-backdrop {
+        display: none;
+      }
+
       .pane-head {
         flex: none;
         display: flex;
@@ -1047,6 +1051,27 @@
         flex-wrap: wrap;
         gap: var(--space-xs);
       }
+      /* Native <details> for the boosted-words list — a browser already
+         knows how to collapse/expand/keyboard-toggle this, no JS needed. */
+      #info-body summary {
+        cursor: pointer;
+        font-size: var(--type-body-md-regular-size);
+        color: var(--color-text-secondary);
+        margin: var(--space-md) 0;
+      }
+      #info-body summary:hover {
+        color: var(--color-text-primary);
+      }
+      #info-body summary + .pillrow {
+        margin-top: var(--space-sm);
+      }
+      .modal-footer-note {
+        margin: 0;
+        padding-top: var(--space-lg);
+        border-top: 1px solid var(--color-border-subtle);
+        font-size: var(--type-caption-size);
+        color: var(--color-text-muted);
+      }
       /* component: route-badge shape reused generically for keyterm/tool pills */
       .pill {
         font-family: var(--font-sans);
@@ -1102,18 +1127,32 @@
         body.tools-open main {
           grid-template-columns: 1fr;
         }
-        /* Nod to where-bus's bottom-sheet: the second stacked pane picks up
-           rounded top corners and a lifted shadow instead of a flat divider —
-           the sheet's signature look, without the drag/dismiss mechanics a
-           two-pane transcript demo doesn't need. */
-        .pane + .pane {
-          border-left: none;
-          border-top: none;
+        /* "How it works" opens as a real bottom sheet on mobile — fixed over
+           the conversation with a backdrop, not stacked inline below it
+           (which read as "the button does nothing" when it just pushed the
+           panel off the bottom of the screen, out of view without a scroll). */
+        body.tools-open .tools-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          z-index: 25;
+          background: rgba(17, 24, 39, 0.45);
+        }
+        .pane.tools {
           border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        }
+        body.tools-open .pane.tools {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+          max-height: 70dvh;
+          z-index: 30;
           box-shadow: var(--shadow-sheet-mobile);
-          margin-top: -var(--space-lg);
-          position: relative;
-          z-index: 1;
+        }
+        body.tools-open .pane.tools .scroll {
+          overflow-y: auto;
+          flex: 1;
         }
         .pane-head {
           position: sticky;
@@ -1254,6 +1293,8 @@
       </section>
     </main>
 
+    <div class="tools-backdrop" id="tools-backdrop"></div>
+
     <div class="bar">
       <div class="bar-left">
         <button id="talk">Start call</button>
@@ -1281,6 +1322,9 @@
       </div>
     </div>
 
-    <script src="/app.js"></script>
+    <!-- Bump this query on every app.js edit — without it, browsers cache
+         the old script indefinitely and a shipped fix can silently not run
+         for returning visitors (this is why "How it works" looked broken). -->
+    <script src="/app.js?v=2"></script>
   </body>
 </html>

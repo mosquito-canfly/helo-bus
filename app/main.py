@@ -54,6 +54,11 @@ class NextArrivalsRequest(BaseModel):
     route: str | None = Field(default=None, description="Route short name, e.g. 'T789' or '300'. Omit for all routes.")
 
 
+class PlanTripRequest(BaseModel):
+    from_stop: str = Field(description="Stop name the caller is starting from, as they said it")
+    to_stop: str = Field(description="Stop name the caller wants to reach, as they said it")
+
+
 class SetAlertRequest(BaseModel):
     stop: str = Field(description="Stop name, as returned by find_stop or as the caller said it")
     route: str = Field(description="Route short name, e.g. 'T789' or '300'")
@@ -84,6 +89,11 @@ def find_stop(req: FindStopRequest) -> dict:
 @app.post("/tools/next_arrivals")
 def next_arrivals(req: NextArrivalsRequest) -> dict:
     return gtfs.next_arrivals(req.stop, req.route)
+
+
+@app.post("/tools/plan_trip")
+def plan_trip(req: PlanTripRequest) -> dict:
+    return gtfs.plan_trip(req.from_stop, req.to_stop)
 
 
 @app.post("/tools/set_arrival_alert")

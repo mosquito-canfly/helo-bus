@@ -888,6 +888,118 @@ def next_arrivals(stop_text: str, route_text: str | None = None) -> dict:
     return {"ok": True, "stop": group.name, "arrivals": arrivals, "message": f"At {group.name}: {spoken}."}
 
 
+# ------------------------------------------------------------------- trips
+
+
+def _direct_route_options(from_group: StopGroup, to_group: StopGroup) -> list[tuple[str, int, str]]:
+    """Every route-direction whose path serves from_group before to_group,
+    as (route_id, direction_id, board_stop_id) — one hop only, no transfers.
+    Pure static-data lookup, no live positions."""
+    from_ids = set(from_group.stop_ids)
+    to_ids = set(to_group.stop_ids)
+    options: list[tuple[str, int, str]] = []
+    for path_key, path in _route_paths.items():
+        board_stop_id = None
+        for stop_id in path:
+            if board_stop_id is None:
+                if stop_id in from_ids:
+                    board_stop_id = stop_id
+                continue
+            if stop_id in to_ids:
+                route_id, direction_id = path_key.rsplit("_", 1)
+                options.append((route_id, int(direction_id), board_stop_id))
+                break
+    return options
+
+
+def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
+    """Direct-route only: does any single route pass from_stop then
+    to_stop. No multi-transfer search — a bus network this size mostly
+    doesn't need one, and a wrong transfer plan is worse than admitting
+    there isn't a direct one and pointing at a bigger hub instead."""
+    _load_static()
+    from_group, error = _resolve_group(from_stop_text)
+    if error:
+        return error
+    to_group, error = _resolve_group(to_stop_text)
+    if error:
+        return error
+    if from_group.name == to_group.name:
+        return {"ok": False, "reason": "same_stop", "message": f"You're already at {from_group.name}."}
+
+    options = _direct_route_options(from_group, to_group)
+    if not options:
+        return {
+            "ok": False,
+            "reason": "no_direct_route",
+            "message": (
+                f"I don't see a direct bus from {from_group.name} to {to_group.name}. "
+                "Try checking arrivals at a bigger hub nearby instead."
+            ),
+        }
+
+    within_hours, next_start = _service_window()
+    ensure_fresh()
+
+    if not within_hours and not _vehicles:
+        return {
+            "ok": False,
+            "reason": "no_service_night",
+            "message": f"RapidKL isn't running right now. Services start again around {next_start}.",
+        }
+
+    if not _last_fetch_ok and not _vehicles:
+        return {
+            "ok": False,
+            "reason": "feed_unavailable",
+            "message": "I can't reach live bus positions right now. Try again in a moment.",
+        }
+
+    # Soonest ETA per route, ignoring a route that qualified via more than
+    # one direction/board stop (rare loop routes).
+    best_by_route: dict[str, dict] = {}
+    for route_id, direction_id, board_stop_id in options:
+        short_name = _routes.get(route_id, {}).get("short_name", route_id)
+        arrivals = _arrivals_for(route_id, direction_id, board_stop_id, short_name)
+        if not arrivals:
+            continue
+        best = min(arrivals, key=lambda a: a["eta_seconds"])
+        current = best_by_route.get(route_id)
+        if current is None or best["eta_seconds"] < current["eta_seconds"]:
+            best_by_route[route_id] = best
+
+    if not best_by_route:
+        routes = _speak_list(sorted({_routes.get(r, {}).get("short_name", r) for r, _, _ in options}))
+        return {
+            "ok": False,
+            "reason": "no_buses_nearby",
+            "message": f"Route {routes} runs there directly, but no buses are close enough to {from_group.name} right now for an ETA.",
+        }
+
+    picks = sorted(best_by_route.values(), key=lambda a: a["eta_seconds"])[:2]
+    if len(picks) == 1:
+        spoken = f"Route {picks[0]['route']} in {picks[0]['eta_human']}"
+    else:
+        spoken = f"Route {picks[0]['route']} in {picks[0]['eta_human']}, or Route {picks[1]['route']} in {picks[1]['eta_human']}"
+
+    return {
+        "ok": True,
+        "from_stop": from_group.name,
+        "to_stop": to_group.name,
+        "options": [
+            {
+                "route": a["route"],
+                "category": a["category"],
+                "board_at": from_group.name,
+                "eta_seconds": a["eta_seconds"],
+                "eta_human": a["eta_human"],
+            }
+            for a in picks
+        ],
+        "message": f"Take {spoken} from {from_group.name} to get to {to_group.name}.",
+    }
+
+
 # ------------------------------------------------------------------- alerts
 
 

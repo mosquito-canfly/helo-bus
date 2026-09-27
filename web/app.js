@@ -118,13 +118,18 @@ function addLine(who, text) {
   body.textContent = text;
   row.append(label, body);
 
-  // The visual payoff: a next_arrivals result behind this reply gets a big
-  // arrival card right in the conversation, not just a line in the feed.
+  // The visual payoff: a next_arrivals or plan_trip result behind this reply
+  // gets a big card right in the conversation, not just a line in the feed.
   if (who === "agent") {
     const arrivalEvent = pending.find(
       (event) => event.tool === "next_arrivals" && event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length
     );
     if (arrivalEvent) row.append(renderArrivalCard(arrivalEvent.result));
+
+    const tripEvent = pending.find(
+      (event) => event.tool === "plan_trip" && event.result && Array.isArray(event.result.options) && event.result.options.length
+    );
+    if (tripEvent) row.append(renderTripCard(tripEvent.result));
   }
 
   // Tie this reply to the tool calls that produced it. Repeats of the same
@@ -235,6 +240,35 @@ function renderArrivalCard(result) {
   return card;
 }
 
+// Same card shape as an arrival, one route badge/hero number/following list —
+// plan_trip's options are already {route, category, eta_human, ...}, so it
+// reuses bigEta and every arrival-card CSS class as-is.
+function renderTripCard(result) {
+  const [primary, ...rest] = result.options;
+  const category = primary.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
+
+  const card = el("div", "arrival-card");
+
+  const top = el("div", "arrival-top");
+  top.append(el("span", `route-badge ${category}`, `Route ${primary.route}`));
+  top.append(el("span", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
+  card.append(top);
+
+  const { num, unit } = bigEta(primary);
+  const hero = el("div", "arrival-hero");
+  hero.append(el("span", "arrival-num", num));
+  if (unit) hero.append(el("span", "arrival-unit", unit));
+  card.append(hero);
+
+  if (rest.length) {
+    const list = el("div", "arrival-following");
+    for (const opt of rest) list.append(el("span", null, `Or Route ${opt.route} · ${opt.eta_human}`));
+    card.append(list);
+  }
+
+  return card;
+}
+
 function renderCall(event) {
   clearEmpty(els.calls);
 
@@ -277,6 +311,8 @@ function renderCall(event) {
 
   if (event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length) {
     card.append(renderEtaList(event.result.arrivals));
+  } else if (event.result && Array.isArray(event.result.options) && event.result.options.length) {
+    card.append(renderEtaList(event.result.options));
   }
 
   els.calls.append(card);
@@ -569,6 +605,7 @@ for (const button of document.querySelectorAll(".example")) {
 // ------------------------------------------------------------ tools panel
 
 const toolsToggle = document.getElementById("tools-toggle");
+const toolsBackdrop = document.getElementById("tools-backdrop");
 
 function setToolsOpen(open) {
   document.body.classList.toggle("tools-open", open);
@@ -576,6 +613,7 @@ function setToolsOpen(open) {
 }
 
 toolsToggle.addEventListener("click", () => setToolsOpen(!document.body.classList.contains("tools-open")));
+toolsBackdrop.addEventListener("click", () => setToolsOpen(false)); // tap-outside-to-close, mobile sheet only
 setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on mobile
 
 // ----------------------------------------------------------- demo data
@@ -619,37 +657,41 @@ function kv(pairs) {
 function renderInfo(data) {
   infoEls.body.textContent = "";
 
-  const config = block(
-    "Who it is",
-    "agent.json",
-    "Uploaded once by scripts/create_agent.py. AssemblyAI stores this and never asks you for it again — it is the agent's identity, not its data."
-  );
-  config.append(kv([
+  const who = block("Who it is", "agent.json");
+  who.append(kv([
     ["Name", data.agent.name],
     ["Voice", data.agent.voice],
-    ["Agent ID", currentAgentId || "not published"],
-    ["Pricing", "$4.50/hr, billed per second"],
   ]));
-  config.append(el("p", "block-note", "Tools it is allowed to call:"));
-  config.append(pills(data.agent.tools.map((t) => t.name), "tool"));
+  who.append(el("p", "block-note", "Tools it can call:"));
+  who.append(pills(data.agent.tools.map((t) => t.name), "tool"));
   if (data.agent.keyterms.length) {
-    config.append(el("p", "block-note", "Words boosted so the transcriber hears them correctly:"));
-    config.append(pills(data.agent.keyterms));
+    const details = document.createElement("details");
+    details.append(
+      el("summary", null, `Show ${data.agent.keyterms.length} boosted words`),
+      pills(data.agent.keyterms)
+    );
+    who.append(details);
   }
 
-  const live = block(
+  const sees = block(
     "What it can see",
     "your bus arrival API",
-    "None of this is in the JSON. The agent has no map of its own — it finds all of this out by calling your API, which pulls RapidKL's live GTFS feed while you talk to it."
+    "Live RapidKL + MRT Feeder data, refreshed about every 45 seconds — none of it is in agent.json."
   );
-  live.append(kv([
+  sees.append(kv([
     ["Stops", data.network.stops],
     ["Routes", data.network.routes],
     ["Buses now", data.network.active_vehicles],
     ["Service hours", data.network.service_hours],
   ]));
 
-  infoEls.body.append(config, live);
+  const footer = el(
+    "p",
+    "modal-footer-note",
+    `Agent ID: ${currentAgentId || "not published"} · $4.50/hr, billed per second`
+  );
+
+  infoEls.body.append(who, sees, footer);
 }
 
 function onInfoKey(event) {
