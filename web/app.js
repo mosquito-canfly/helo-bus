@@ -265,11 +265,21 @@ function renderTripSteps(steps) {
   return wrap;
 }
 
+// Only ever shows a number that came from the tool result's own fare_total
+// — never computed or guessed here.
+function fareLine(fareTotal) {
+  if (!fareTotal || fareTotal.amount == null) return null;
+  const text = fareTotal.all_known ? `RM ${fareTotal.amount.toFixed(2)} total` : `RM ${fareTotal.amount.toFixed(2)} known so far`;
+  return el("span", "trip-fare", text);
+}
+
 function renderTripCard(result) {
   const card = el("div", "arrival-card");
 
   const top = el("div", "arrival-top");
   top.append(el("span", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
+  const fare = fareLine(result.options[0].fare_total);
+  if (fare) top.append(fare);
   card.append(top);
 
   card.append(renderTripSteps(result.options[0].steps));

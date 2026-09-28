@@ -1,0 +1,161 @@
+{
+  "first_try_accuracy": 72.5,
+  "top3_accuracy": 77.5,
+  "correct_no_match_rate": 90.0,
+  "latency_p50_ms": 0.6,
+  "latency_p95_ms": 257.3,
+  "total_queries": 50,
+  "plan_trip_pairs": 10,
+  "plan_trip_accuracy": 100.0,
+  "plan_trip_latency_p50_ms": 155.6,
+  "plan_trip_latency_p95_ms": 652.7,
+  "find_stop_misses": [
+    {
+      "query": "Damansara",
+      "category": "exact",
+      "expected": [
+        "Damansara Utama",
+        "Damansara Jaya",
+        "Damansara Idaman",
+        "Damansara Perdana",
+        "Damansara"
+      ],
+      "got": [
+        "Neo Damansara",
+        "Uoa Damansara",
+        "Cita Damansara",
+        "Damansara Intan",
+        "Prima Damansara"
+      ]
+    },
+    {
+      "query": "Pasar Seri",
+      "category": "mishearing",
+      "expected": [
+        "Pasar Seni (Platform B5)",
+        "(M) Pasar Seni (Platform A6)",
+        "Pasar Seni (Platform A1 - A2)",
+        "Pasar Seni (Platform A6 - A8)",
+        "Pasar Seni (Platform E1 - E3)"
+      ],
+      "got": [
+        "Pasar Seri Kembangan"
+      ]
+    },
+    {
+      "query": "Damansaraa",
+      "category": "mishearing",
+      "expected": [
+        "Damansara Utama",
+        "Damansara Jaya",
+        "Damansara Idaman",
+        "Damansara Perdana",
+        "Damansara"
+      ],
+      "got": [
+        "Uoa Damansara",
+        "Neo Damansara",
+        "Cita Damansara",
+        "Damansara Intan",
+        "Prima Damansara"
+      ]
+    },
+    {
+      "query": "Perpustakaan U M",
+      "category": "mishearing",
+      "expected": [
+        "Perpustakaan Um"
+      ],
+      "got": [
+        "I.k.m. KL",
+        "Flat Blok M",
+        "S.m. Teknik KL",
+        "(M) TNB Pangsun",
+        "M Astra Setapak"
+      ]
+    },
+    {
+      "query": "National Mosque",
+      "category": "english",
+      "expected": [
+        "Masjid Negara"
+      ],
+      "got": [
+        "Masjid"
+      ]
+    },
+    {
+      "query": "New Village",
+      "category": "english",
+      "expected": [
+        "Kampung Baru"
+      ],
+      "got": [
+        "G Village",
+        "KG Baru BT 11",
+        "KG Baru Hicom",
+        "KG SG Tua Baru",
+        "Sentul Village"
+      ]
+    },
+    {
+      "query": "National Palace",
+      "category": "english",
+      "expected": [
+        "Istana Negara"
+      ],
+      "got": [
+        "Zoo Negara",
+        "Masjid Negara",
+        "Istana Alam Shah",
+        "Pusat Kusta Negara",
+        "Bank Negara Malaysia"
+      ]
+    },
+    {
+      "query": "Petaling Street",
+      "category": "landmark_alias",
+      "expected": [
+        "Pasar Seni (Platform B5)",
+        "(M) Pasar Seni (Platform A6)",
+        "Pasar Seni (Platform A1 - A2)",
+        "Pasar Seni (Platform A6 - A8)",
+        "Pasar Seni (Platform E1 - E3)"
+      ],
+      "got": [
+        "JLN 4/2",
+        "JLN 4/9C",
+        "Jalan 4/3",
+        "Jalan 4/5D",
+        "SPG JLN 4/7"
+      ]
+    },
+    {
+      "query": "The Gardens",
+      "category": "landmark_alias",
+      "expected": [
+        "Mid Valley (Selatan)",
+        "(M1) Mid Valley South Court"
+      ],
+      "got": [
+        "Taman Ria",
+        "TMN Putra",
+        "Taman Tar",
+        "Taman Ltat",
+        "Taman Kaya"
+      ]
+    },
+    {
+      "query": "Disneyland Kuala Lumpur",
+      "category": "no_match",
+      "expected": "none",
+      "got": [
+        "Ilp Kuala Lumpur",
+        "Seri Kuala Lumpur",
+        "Ilp Kuala Lumpur (Opp)",
+        "Kompleks Mahkamah Kuala Lumpur"
+      ]
+    }
+  ],
+  "plan_trip_misses": []
+}

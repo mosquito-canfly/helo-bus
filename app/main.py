@@ -19,9 +19,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from starlette.responses import Response
+from starlette.responses import FileResponse, Response
 
-from . import gtfs, store
+from . import gtfs, insights, store
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -46,6 +46,7 @@ async def record_tool_calls(request, call_next):
     log.info("tool call %s: %.2fs", request.url.path, elapsed)
     payload = b"".join([chunk async for chunk in response.body_iterator])
     store.log_event(request.url.path, body, payload)
+    insights.log_event(request.url.path, body, payload)  # best-effort; never raises
     return Response(
         content=payload,
         status_code=response.status_code,
@@ -182,6 +183,19 @@ def api_token() -> dict:
     if resp.status_code >= 400:
         raise HTTPException(resp.status_code, f"Token request failed: {resp.text}")
     return {"token": resp.json()["token"]}
+
+
+@app.get("/api/insights")
+def api_insights() -> dict:
+    data = insights.summary()
+    eval_file = ROOT / "data" / "eval_results.json"
+    data["eval"] = json.loads(eval_file.read_text(encoding="utf-8")) if eval_file.exists() else None
+    return data
+
+
+@app.get("/insights")
+def insights_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "insights.html")
 
 
 if WEB_DIR.exists():

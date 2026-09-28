@@ -181,6 +181,20 @@ handling, and the "already passed" filter all follow the same approach
 validated there, ported from Java. `where-bus` itself is not called or
 depended on at runtime.
 
+### Fares
+
+None of the three GTFS feeds this app uses (`rapid-bus-kl`, `rapid-bus-mrtfeeder`,
+`rapid-rail-kl`) ship `fare_attributes.txt` or `fare_rules.txt` — checked
+directly against the downloaded feeds. `plan_trip`'s fare estimate uses one
+official, citable number: **MRT Feeder Bus, RM1.00 per trip**, per
+[Prasarana's own MRT Feeder Bus page](https://www.myrapid.com.my/traveling-with-us/how-to-travel-with-us/rapid-kl/mrt/mrt-feeder-bus)
+(checked 2026-09-28). `rapid-bus-kl` fares are not one flat rate — Prasarana's
+[bus fare page](https://myrapid.com.my/bus-train/rapid-kl/bus/) shows different
+flat/zonal rates per service tier (Bandar/Tempatan, Ekspres, Utama), and
+nothing in the GTFS feed tags which tier a route belongs to — and rail fares
+are distance/zone-based, not flat. Both are left as `fare: null` (unknown)
+rather than guessed. See `MRTFEEDER_FARE_RM` in `app/gtfs.py` for the code.
+
 ## Two layers of validation, and which to use
 
 The tool schemas use `pattern`, `enum` and `examples`. Values failing those are

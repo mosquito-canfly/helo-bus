@@ -1094,6 +1094,31 @@ def _linked_rail_groups(bus_group: StopGroup) -> list[RailStationGroup]:
 
 _RAIL_PREFIX_RE = re.compile(r"^(LRT|MRT|BRT)\s+")
 
+# Fare data: none of the three GTFS feeds (rapid-bus-kl, rapid-bus-mrtfeeder,
+# rapid-rail-kl) ship fare_attributes.txt or fare_rules.txt — checked
+# directly against the downloaded feeds, nothing to compute a per-route or
+# per-OD fare from.
+#
+# The one number below that IS used is an official, citable flat fare:
+# MRT Feeder Bus, RM1.00 per trip — Prasarana's own page,
+# https://www.myrapid.com.my/traveling-with-us/how-to-travel-with-us/rapid-kl/mrt/mrt-feeder-bus
+# (checked 2026-09-28). It applies to every route in rapid-bus-mrtfeeder,
+# since that category IS the MRT Feeder Bus service.
+#
+# rapid-bus-kl fares are NOT one flat rate: Prasarana's own fare page
+# (https://myrapid.com.my/bus-train/rapid-kl/bus/) shows Bandar/Tempatan
+# services at a flat RM1, Ekspres at a flat RM3.80, and Utama services on a
+# zonal RM1-RM3 table — and nothing in the GTFS feed cleanly tags which tier
+# a given route_id belongs to. Rather than guess, every rapid-bus-kl leg's
+# fare is left unknown (None). Same for every rail leg: LRT/MRT/Monorail
+# fares are distance/zone-based per official sources, not a flat rate, and
+# there's no fare table in the feed to compute an exact one from.
+MRTFEEDER_FARE_RM = 1.00
+
+
+def _leg_fare(category: str | None) -> float | None:
+    return MRTFEEDER_FARE_RM if category == "rapid-bus-mrtfeeder" else None
+
 
 def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int, from_name: str, to_name: str) -> dict:
     path_key = f"{line_id}_{direction_id}"
@@ -1108,6 +1133,7 @@ def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int,
         "from_station": from_name,
         "to_station": to_name,
         "stops": alight_idx - board_idx,
+        "fare": None,  # rail fares are distance/zone-based; not in the feed, not guessed
     }
 
 
@@ -1128,6 +1154,7 @@ def _bus_step(route_id: str, direction_id: int, board_stop_id: str, board_name: 
         "alight_at": alight_name,
         "eta_seconds": best["eta_seconds"],
         "eta_human": best["eta_human"],
+        "fare": _leg_fare(best["category"]),
     }
 
 
@@ -1199,6 +1226,29 @@ def _step_phrase(step: dict) -> str:
         return f"Route {step['route']} from {step['board_at']} to {step['alight_at']}, next one in {step['eta_human']}"
     plural = "s" if step["stops"] != 1 else ""
     return f"the {step['line']} toward {step['direction']}, {step['stops']} stop{plural} to {step['to_station']}"
+
+
+def _step_leg_label(step: dict) -> str:
+    return f"the {step['route']}" if step["mode"] == "bus" else f"the {step['line']}"
+
+
+def _fare_total(steps: list[dict]) -> dict:
+    known = [s["fare"] for s in steps if s.get("fare") is not None]
+    return {"amount": round(sum(known), 2) if known else None, "all_known": len(known) == len(steps)}
+
+
+def _fare_phrase(steps: list[dict]) -> str:
+    """Only ever states a fare that came from a step's own 'fare' field —
+    never invents or estimates one for a leg that doesn't have it."""
+    known = [s for s in steps if s.get("fare") is not None]
+    unknown = [s for s in steps if s.get("fare") is None]
+    if not unknown:
+        total = sum(s["fare"] for s in known)
+        return f" Fare is about RM {total:.2f} in total."
+    if known:
+        parts = "; ".join(f"{_step_leg_label(s)} fare is RM {s['fare']:.2f}" for s in known)
+        return f" {parts[0].upper()}{parts[1:]}; the rest of the fare isn't in my data."
+    return ""
 
 
 def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
@@ -1276,6 +1326,7 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
 
     phrases = [", then ".join(_step_phrase(s) for s in steps) for steps in resolved]
     message = "Take " + phrases[0] + "."
+    message += _fare_phrase(resolved[0])
     if len(phrases) > 1:
         message += " Or " + phrases[1] + "."
     if stale:
@@ -1285,7 +1336,7 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
         "ok": True,
         "from_stop": from_group.name,
         "to_stop": to_group.name,
-        "options": [{"steps": steps} for steps in resolved],
+        "options": [{"steps": steps, "fare_total": _fare_total(steps)} for steps in resolved],
         "message": message,
     }
 

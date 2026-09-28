@@ -5,3 +5,4 @@ __pycache__/
 venv/
 agent_id.txt
 .gtfs_cache/
+data/insights.db
