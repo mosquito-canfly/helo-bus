@@ -48,6 +48,13 @@ def _rail_point(display_name: str) -> dict | None:
     return {"lat": s["lat"], "lon": s["lon"]}
 
 
+def _any_point(display_name: str) -> dict | None:
+    """A walk leg's endpoints can be either namespace — a rail station
+    (the usual interchange case, e.g. Muzium Negara -> KL Sentral) or a bus
+    stop (the final "walk to the destination" case)."""
+    return _bus_point(display_name) or _rail_point(display_name)
+
+
 def _rail_line_id(display_name: str) -> str | None:
     for line_id, r in gtfs._rail_routes.items():
         name = gtfs._RAIL_PREFIX_RE.sub("", r.get("long_name") or r.get("short_name", line_id))
@@ -89,9 +96,21 @@ def _rail_leg_points(step: dict) -> list[list[float]]:
     return []
 
 
+def _walk_leg_points(step: dict) -> list[list[float]]:
+    """A straight line — there's no footpath network loaded, just the two
+    endpoints (real GTFS distance for these is short, <=500m, so a straight
+    line is an honest-enough sketch of a walking leg on the map)."""
+    a, b = _any_point(step["board_at"]), _any_point(step["alight_at"])
+    if not (a and b):
+        return []
+    return [[a["lat"], a["lon"]], [b["lat"], b["lon"]]]
+
+
 def _leg_geometry(step: dict) -> dict:
     if step["mode"] == "bus":
         return {"mode": "bus", "route": step["route"], "category": step.get("category"), "points": _bus_leg_points(step)}
+    if step["mode"] == "walk":
+        return {"mode": "walk", "points": _walk_leg_points(step)}
     line_id = _rail_line_id(step["line"])
     color = gtfs._rail_routes.get(line_id, {}).get("color") if line_id else None
     return {"mode": "rail", "line": step["line"], "color": color, "points": _rail_leg_points(step)}
@@ -120,6 +139,9 @@ def _option_from_steps(steps: list[dict]) -> dict | None:
         if step["mode"] == "bus":
             board_name, alight_name = step["board_at"], step["alight_at"]
             board_pt, alight_pt = _bus_point(board_name), _bus_point(alight_name)
+        elif step["mode"] == "walk":
+            board_name, alight_name = step["board_at"], step["alight_at"]
+            board_pt, alight_pt = _any_point(board_name), _any_point(alight_name)
         else:
             board_name, alight_name = step["from_station"], step["to_station"]
             board_pt, alight_pt = _rail_point(board_name), _rail_point(alight_name)
@@ -155,6 +177,9 @@ def _tuple_to_step(t: tuple) -> dict:
         _, route_id, _direction_id, _board_stop_id, board_name, alight_name = t
         route = gtfs._routes.get(route_id, {})
         return {"mode": "bus", "route": route.get("short_name", route_id), "category": route.get("category"), "board_at": board_name, "alight_at": alight_name}
+    if t[0] == "walk":
+        _, meters, from_name, to_name = t
+        return {"mode": "walk", "board_at": from_name, "alight_at": to_name, "meters": meters}
     _, line_id, _direction_id, _board_idx, _alight_idx, from_name, to_name = t
     line = gtfs._rail_routes.get(line_id, {})
     line_name = gtfs._RAIL_PREFIX_RE.sub("", line.get("long_name") or line.get("short_name", line_id))

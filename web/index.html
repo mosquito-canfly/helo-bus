@@ -1036,9 +1036,51 @@
         background: var(--color-surface);
         border-bottom: 1px solid var(--color-border-subtle);
         text-align: center;
+        position: relative;
       }
       .ios-install-hint[hidden] {
         display: none;
+      }
+      #ios-install-hint-dismiss {
+        position: absolute;
+        right: var(--space-md);
+        top: 50%;
+        transform: translateY(-50%);
+        font: inherit;
+        font-size: 11px;
+        line-height: 1;
+        color: var(--color-text-secondary);
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: var(--space-xs);
+      }
+      #ios-install-hint-dismiss:hover {
+        color: var(--color-text-primary);
+      }
+
+      /* Solid black pill, same visual weight as the primary call button —
+         install is a real action worth standing out among the quieter
+         .ghost header pills, not blending in with them. */
+      #install-btn {
+        font-family: var(--font-sans);
+        font-size: var(--type-caption-size);
+        font-weight: 700;
+        color: #ffffff;
+        background: var(--color-ink);
+        border: 1px solid var(--color-ink);
+        border-radius: var(--radius-pill);
+        padding: var(--space-sm) var(--space-lg);
+        cursor: pointer;
+        box-shadow: var(--shadow-md);
+        transition: background 0.15s;
+      }
+      #install-btn:hover {
+        background: #2b2b2b;
+      }
+      #install-btn:focus-visible {
+        outline: 2px solid var(--color-ink);
+        outline-offset: 2px;
       }
 
       /* ------------------------------------------------------- control bar */
@@ -1410,13 +1452,17 @@
       /* ------------------------------------------------------------ mobile */
 
       @media (max-width: 880px) {
+        /* Fixed viewport, like the desktop layout — nothing here scrolls
+           the whole page. The map is pinned at the top (Google-Maps-style,
+           ~35-40% of the viewport height) and stays put; only the
+           conversation (.scroll inside .hero-pane) scrolls beneath it, and
+           the bottom bar stays fixed throughout. */
         html,
         body {
-          height: auto;
+          height: 100%;
         }
         body {
-          overflow: visible;
-          min-height: 100dvh;
+          overflow: hidden;
           padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
         }
         .top {
@@ -1441,55 +1487,51 @@
           font-size: var(--type-title-md-size);
           line-height: var(--type-title-md-lh);
         }
-        /* The live map replaces the old toggle-a-sheet panel on mobile: it's
-           always visible, pinned above the conversation (map ~40% of the
-           viewport, conversation filling the rest) rather than hidden behind
-           a button — there's nothing left to toggle, so the button hides. */
         main {
           display: flex;
           flex-direction: column;
-          overflow: visible;
+          min-height: 0;
         }
         #tools-toggle {
           display: none;
         }
+        /* Just the map, pinned — the trip-panel summary and Developer view
+           are desktop-sidebar extras (the conversation's own arrival/trip
+           cards already carry that content on a phone-width screen). */
         .pane.tools {
           display: flex;
           order: 1;
           flex: none;
-          max-height: 60vh;
+          height: 38vh;
           border-left: none;
           border-bottom: 1px solid var(--color-border-subtle);
+        }
+        .pane.tools .pane-head,
+        .pane.tools .trip-panel,
+        .pane.tools .dev-view {
+          display: none;
+        }
+        .map-wrap {
+          flex: 1;
+          height: auto;
         }
         .hero-pane {
           order: 2;
           flex: 1;
           min-height: 0;
         }
-        .map-wrap {
-          height: 40vh;
-        }
         .tools-backdrop {
           display: none !important;
         }
-        .pane-head {
-          position: sticky;
-          top: 0;
-          z-index: 5;
-        }
         .scroll {
-          overflow: visible;
-          flex: none;
           padding: var(--space-lg) var(--space-lg) var(--space-xl);
-        }
-        .dev-view[open] .scroll {
-          overflow-y: auto;
         }
         .bar {
           position: fixed;
           inset: auto 0 0 0;
           z-index: 40;
           padding: 0 var(--space-lg);
+          padding-bottom: env(safe-area-inset-bottom);
         }
       }
 
@@ -1563,15 +1605,18 @@
         </div>
       </div>
       <div class="top-actions">
-        <button id="install-btn" class="ghost" type="button" hidden>Install app</button>
+        <button id="install-btn" type="button" hidden>Install app</button>
         <button id="tools-toggle" class="ghost" type="button" aria-expanded="false">Live bus info</button>
-        <button id="info-btn" class="ghost" type="button">Demo data</button>
+        <button id="info-btn" class="ghost" type="button">About agent</button>
         <a class="ghost" href="/insights">Insights</a>
         <span id="status" data-state="idle">Idle</span>
       </div>
     </header>
 
-    <p class="ios-install-hint" id="ios-install-hint" hidden>Tap Share → Add to Home Screen to install Helo BusKL.</p>
+    <p class="ios-install-hint" id="ios-install-hint" hidden>
+      Tap Share → Add to Home Screen to install Helo BusKL.
+      <button id="ios-install-hint-dismiss" type="button" aria-label="Dismiss">✕</button>
+    </p>
 
     <div class="alert-banner" id="alert-banner" hidden>
       <span class="alert-dot"></span>
@@ -1644,7 +1689,7 @@
         aria-labelledby="info-title"
       >
         <div class="modal-head">
-          <h2 id="info-title">What the agent knows</h2>
+          <h2 id="info-title">About agent</h2>
           <button class="icon-btn" data-close type="button" aria-label="Close">
             ✕
           </button>

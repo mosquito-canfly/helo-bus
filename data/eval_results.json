@@ -2,13 +2,13 @@
   "first_try_accuracy": 80.4,
   "top3_accuracy": 84.8,
   "correct_no_match_rate": 90.0,
-  "latency_p50_ms": 0.8,
-  "latency_p95_ms": 192.7,
+  "latency_p50_ms": 0.9,
+  "latency_p95_ms": 229.8,
   "total_queries": 56,
-  "plan_trip_pairs": 10,
+  "plan_trip_pairs": 12,
   "plan_trip_accuracy": 100.0,
-  "plan_trip_latency_p50_ms": 143.3,
-  "plan_trip_latency_p95_ms": 601.2,
+  "plan_trip_latency_p50_ms": 159.1,
+  "plan_trip_latency_p95_ms": 401.8,
   "find_stop_misses": [
     {
       "query": "Damansara",
@@ -53,8 +53,8 @@
         "Damansara"
       ],
       "got": [
-        "Neo Damansara",
         "Uoa Damansara",
+        "Neo Damansara",
         "Cita Damansara",
         "Damansara Intan",
         "Prima Damansara"
@@ -70,8 +70,8 @@
         "I.k.m. KL",
         "Flat Blok M",
         "S.m. Teknik KL",
-        "(M) TNB Pangsun",
-        "M Astra Setapak"
+        "M Astra Setapak",
+        "(M) TNB Pangsun"
       ]
     },
     {
@@ -94,8 +94,8 @@
         "G Village",
         "KG Baru Hicom",
         "KG Baru BT 11",
-        "KG SG Tua Baru",
-        "KG Baru Ampang"
+        "Sentul Village",
+        "KG SG Tua Baru"
       ]
     },
     {

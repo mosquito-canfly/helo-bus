@@ -9,15 +9,22 @@ if ("serviceWorker" in navigator) {
 
 // -------------------------------------------------------------- install
 
+// navigator.standalone is iOS's own flag for "already installed", distinct
+// from the standard display-mode media query — checked either way since
+// this app is already running installed either way once true.
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
 const installBtn = document.getElementById("install-btn");
 let deferredInstallPrompt = null;
 
 // Android/Chrome offers an install prompt we can trigger ourselves; only
-// show the button once the browser has actually offered one.
+// show the button once the browser has actually offered one, and never
+// while already running installed (a stray/late event shouldn't resurface it).
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  installBtn.hidden = false;
+  if (!isStandalone) installBtn.hidden = false;
 });
 
 installBtn.addEventListener("click", async () => {
@@ -34,13 +41,15 @@ window.addEventListener("appinstalled", () => {
 
 // iOS Safari has no beforeinstallprompt at all — the only way to install is
 // Share -> Add to Home Screen, so just say that, once, and only if this
-// isn't already running installed (navigator.standalone is iOS's own flag
-// for that, distinct from the standard display-mode media query below).
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+// isn't already running installed — dismissible, since it's a hint, not a
+// permission prompt the user is forced to act on.
+const iosInstallHint = document.getElementById("ios-install-hint");
 if (isIOS && !isStandalone) {
-  document.getElementById("ios-install-hint").hidden = false;
+  iosInstallHint.hidden = false;
 }
+document.getElementById("ios-install-hint-dismiss").addEventListener("click", () => {
+  iosInstallHint.hidden = true;
+});
 
 const els = {
   talk: document.getElementById("talk"),
@@ -223,7 +232,12 @@ const TRANSFER_ICON_SVG =
   '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/>' +
   '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>';
 
-const TRIP_ICONS = { bus: BUS_ICON_SVG, train: TRAIN_ICON_SVG, transfer: TRANSFER_ICON_SVG };
+const WALK_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="13" cy="4" r="1.5" fill="currentColor" stroke="none"/><path d="M10.5 21l1.5-6-2-2 .5-4.5 3 2.5 2.5 1"/>' +
+  '<path d="M12.5 9.5L11 15l-3 3"/><path d="M14 12l3 1 1.5 4"/></svg>';
+
+const TRIP_ICONS = { bus: BUS_ICON_SVG, train: TRAIN_ICON_SVG, transfer: TRANSFER_ICON_SVG, walk: WALK_ICON_SVG };
 
 // ETA rows styled like where-bus's own stop-selected view: icon chip, route
 // badge coloured by category (RapidKL maroon / MRT Feeder slate), bold ETA.
@@ -295,6 +309,11 @@ function renderTripStep(step) {
     const category = step.category === "rapid-bus-mrtfeeder" ? "rapid-bus-mrtfeeder" : "rapid-bus-kl";
     row.append(el("span", `route-badge ${category}`, `Route ${step.route}`));
     row.append(el("span", "trip-step-detail", `${step.board_at} → ${step.alight_at} · ${step.eta_human}`));
+  } else if (step.mode === "walk") {
+    const chip = el("span", "icon-chip");
+    chip.innerHTML = WALK_ICON_SVG;
+    row.append(chip);
+    row.append(el("span", "trip-step-detail", `Walk to ${step.alight_at} · about ${step.minutes} min`));
   } else {
     row.append(el("span", "route-badge rapid-bus-mrtfeeder", step.line));
     const plural = step.stops !== 1 ? "s" : "";
@@ -324,6 +343,8 @@ function tripNumberedRows(steps) {
       const dest = isLast ? ` to ${step.alight_at}` : "";
       rows.push({ icon: "bus", text: `Bus ${step.route} from ${step.board_at}${dest} — next in ${step.eta_human}` });
       if (!isLast) rows.push({ icon: "transfer", text: `Get off at ${step.alight_at}` });
+    } else if (step.mode === "walk") {
+      rows.push({ icon: "walk", text: `Walk to ${step.alight_at} — about ${step.minutes} min` });
     } else {
       const plural = step.stops !== 1 ? "s" : "";
       rows.push({ icon: "train", text: `${step.line} toward ${step.direction} — ${step.stops} stop${plural} to ${step.to_station}` });
@@ -853,8 +874,13 @@ function renderMap(state) {
   }
   for (const leg of (option && option.legs) || []) {
     if (!leg.points || !leg.points.length) continue;
-    const color = leg.mode === "rail" ? leg.color || "#6b7280" : "#111827";
-    mapLayers.push(L.polyline(leg.points, { color, weight: 5, opacity: 0.85 }).addTo(map));
+    const color = leg.mode === "rail" ? leg.color || "#6b7280" : leg.mode === "walk" ? "#9ca3af" : "#111827";
+    const style = { color, weight: 5, opacity: 0.85 };
+    if (leg.mode === "walk") {
+      style.weight = 3;
+      style.dashArray = "2 8"; // a walking leg reads as a dotted line, distinct from a ridden route
+    }
+    mapLayers.push(L.polyline(leg.points, style).addTo(map));
     leg.points.forEach(([lat, lon]) => addBounds(lat, lon));
   }
   for (const v of (option && option.vehicles) || []) {
@@ -1002,7 +1028,7 @@ async function openInfo() {
   try {
     renderInfo(await fetch("/api/demo-info").then((r) => r.json()));
   } catch (_) {
-    infoEls.body.textContent = "Could not load demo data. Is the bus arrival API running?";
+    infoEls.body.textContent = "Could not load agent info. Is the bus arrival API running?";
   }
 }
 

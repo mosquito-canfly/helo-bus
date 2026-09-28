@@ -70,9 +70,11 @@
     {"from_stop": "Bandar Kajang", "to_stop": "Taman Botani Putrajaya", "expected": "no_direct_route"},
     {"from_stop": "KL Sentral", "to_stop": "KL Sentral", "expected": "same_stop"},
     {"from_stop": "Damansara", "to_stop": "KL Sentral", "expected": "ambiguous_stop"},
-    {"from_stop": "Bangsar Utama", "to_stop": "Bandar Kajang", "expected": "no_direct_route"},
+    {"from_stop": "Bangsar Utama", "to_stop": "Bandar Kajang", "expected": "found"},
     {"from_stop": "Perpustakaan Um", "to_stop": "KL Sentral", "expected": "found"},
-    {"from_stop": "Sogo KL", "to_stop": "Mid Valley (Selatan)", "expected": "no_direct_route"},
-    {"from_stop": "KLCC (Opp)", "to_stop": "Pasar Seni (Platform B5)", "expected": "found"}
+    {"from_stop": "Sogo KL", "to_stop": "Mid Valley (Selatan)", "expected": "found"},
+    {"from_stop": "KLCC (Opp)", "to_stop": "Pasar Seni (Platform B5)", "expected": "found"},
+    {"from_stop": "Kolej Kediaman Kesepuluh", "to_stop": "KL Sentral", "expected": "found"},
+    {"from_stop": "KL Sentral", "to_stop": "Pasar Seni", "expected": "found"}
   ]
 }

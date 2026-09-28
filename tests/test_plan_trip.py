@@ -93,25 +93,56 @@ class RailStationNameFallbackTests(unittest.TestCase):
         result = gtfs.plan_trip("Perpustakaan UM", "KL Sentral")
         self.assertNotIn(result.get("reason"), ("no_direct_route", "ambiguous_stop"), result)
 
-    def test_kolej_kediaman_kesepuluh_to_kl_sentral_is_genuinely_unreachable(self):
-        # Not a bug: T815's only rail-linked stop is Phileo Damansara, which
-        # is solely on the Kajang Line — and KL Sentral is only linked to
-        # the Kelana Jaya Line and the Monorail, neither of which is the
-        # Kajang Line. Reaching KL Sentral from here needs a rail-to-rail
-        # transfer, outside this app's one-transfer design (see plan_trip's
-        # docstring). This documents that the rejection is correct, not a
-        # routing bug — the agent's job here is next_arrivals + nearest rail
-        # station, not a route that doesn't exist within one transfer.
+    def test_kolej_kediaman_kesepuluh_to_kl_sentral_via_rail_interchange(self):
+        # Real route from a live call: T815 -> Phileo Damansara MRT -> ride
+        # the Kajang Line -> Muzium Negara -> walk the ~350-500m walkway to
+        # KL Sentral. This needs a rail LINE CHANGE (Kajang Line only
+        # reaches Muzium Negara, not KL Sentral directly) plus a walking
+        # leg _rail_journeys/_walk_extended model — genuinely unreachable
+        # before that support existed (see git history for the prior
+        # "genuinely unreachable" version of this test).
+        # Structural check via debug_trip (see _debug_step_summary), which
+        # doesn't depend on a live bus ETA existing right now — same
+        # reasoning as RailInclusiveTests above.
+        debug = gtfs.debug_trip("Kolej Kediaman Kesepuluh", "KL Sentral")
+        self.assertGreater(debug["rail_inclusive_options_count"], 0, debug)
+        modes = [s["mode"] for s in debug["rail_inclusive_options"][0]]
+        self.assertEqual(modes, ["bus", "rail", "walk"], debug["rail_inclusive_options"][0])
+        walk_step = debug["rail_inclusive_options"][0][2]
+        self.assertEqual(walk_step["to"], "KL Sentral")
+        self.assertLessEqual(walk_step["meters"], 500)
+
         result = gtfs.plan_trip("Kolej Kediaman Kesepuluh", "KL Sentral")
-        self.assertFalse(result["ok"], result)
-        self.assertEqual(result["reason"], "no_direct_route")
-        # Real-call regression: T815 does reach a rail station (Phileo
-        # Damansara, its own loop terminus) even though that station's line
-        # doesn't help reach KL Sentral specifically — nearby_rail_stations
-        # used to only ever report a WALKING-distance station (none here),
-        # leaving the caller with nothing but "try a bigger hub". It should
-        # now name Phileo Damansara as worth checking from there.
-        self.assertIn("Phileo Damansara", result["nearby_rail_stations"])
+        self.assertNotEqual(result.get("reason"), "no_direct_route", result)
+
+
+class RailInterchangeTests(unittest.TestCase):
+    """Regression for the one-line-change rail graph (_rail_journeys /
+    _walk_links / _interchange_groups) added after real calls hit trips
+    that need a genuine line change or a short interchange walk."""
+
+    def test_kl_sentral_to_pasar_seni_prefers_the_direct_line_no_detour(self):
+        # KL Sentral is directly on the Kelana Jaya Line, one stop from
+        # Pasar Seni — a real regression had this drown in worse rail-
+        # inclusive candidates (e.g. via LRT Abdullah Hukum) instead of
+        # surfacing the obvious direct hop. Only the direct option should
+        # survive: the dominance prune must drop a strictly-worse 2nd
+        # option (more transfers, more or equal stops).
+        result = gtfs.plan_trip("KL Sentral", "Pasar Seni")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(len(result["options"]), 1)
+        steps = result["options"][0]["steps"]
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]["mode"], "rail")
+        self.assertEqual(steps[0]["line"], "Kelana Jaya Line")
+        for opt in result["options"]:
+            self.assertNotIn("Abdullah Hukum", " ".join(s.get("from_station", "") + s.get("to_station", "") for s in opt["steps"]))
+
+    def test_one_line_change_via_same_name_interchange(self):
+        # Masjid Jamek is one RailStationGroup spanning 3 lines (Ampang,
+        # Kelana Jaya, Sungai Buloh-Kajang) — a free interchange, no walk.
+        masjid_jamek = gtfs._rail_group_by_display_name["Masjid Jamek"]
+        self.assertGreaterEqual(len({l for sid in masjid_jamek.station_ids for l in gtfs._station_lines.get(sid, set())}), 2)
 
 
 if __name__ == "__main__":

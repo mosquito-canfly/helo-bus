@@ -23,6 +23,7 @@ from app import gtfs  # noqa: E402
 
 OUT_FILE = ROOT / "data" / "static.json"
 RAIL_LINK_METERS = 300.0  # walking-distance threshold for bus stop <-> rail station
+RAIL_INTERCHANGE_METERS = 500.0  # walking-distance threshold between two DIFFERENTLY-named rail stations
 
 
 def _build_rail_links() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
@@ -46,6 +47,26 @@ def _build_rail_links() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     return bus_to_rail, rail_to_bus
 
 
+def _build_rail_interchanges() -> list[dict]:
+    """Walking-distance links between DIFFERENTLY-named rail station groups
+    — real transfers KL's rail GTFS doesn't encode directly (e.g. Muzium
+    Negara <-> KL Sentral, ~500m; KL Sentral <-> "KL Sentral - Redone", a
+    same-complex naming split). A station served by multiple lines under
+    ONE name (Masjid Jamek, Pasar Seni) already shares one RailStationGroup
+    via _build_rail_station_groups, so it needs no edge here. Same coarse
+    haversine-on-one-representative-point approach as _build_rail_links."""
+    groups = list(gtfs._rail_groups_by_name.values())
+    edges = []
+    for i in range(len(groups)):
+        pa = gtfs._rail_stations[groups[i].station_ids[0]]
+        for j in range(i + 1, len(groups)):
+            pb = gtfs._rail_stations[groups[j].station_ids[0]]
+            dist_m = gtfs._haversine_km(pa["lat"], pa["lon"], pb["lat"], pb["lon"]) * 1000.0
+            if dist_m <= RAIL_INTERCHANGE_METERS:
+                edges.append({"a": groups[i].name, "b": groups[j].name, "meters": round(dist_m)})
+    return edges
+
+
 def main() -> None:
     for category in gtfs.CATEGORIES:
         if not (gtfs._cache_dir(category) / "stops.txt").exists():
@@ -61,6 +82,7 @@ def main() -> None:
     gtfs._load_rail_static()
     gtfs._build_rail_station_groups()
     bus_to_rail, rail_to_bus = _build_rail_links()
+    rail_interchanges = _build_rail_interchanges()
 
     stops = {
         sid: {"name": s["name"], "normalized": gtfs._normalize(s["name"]), "lat": s["lat"], "lon": s["lon"]}
@@ -94,6 +116,7 @@ def main() -> None:
             "groups": rail_groups,
             "bus_to_rail": bus_to_rail,
             "rail_to_bus": rail_to_bus,
+            "interchanges": rail_interchanges,
         },
     }
 
@@ -103,7 +126,7 @@ def main() -> None:
     size_kb = OUT_FILE.stat().st_size / 1024
     print(f"stops={len(stops)} routes={len(gtfs._routes)} route_paths={len(gtfs._route_paths)} groups={len(groups)}")
     print(f"rail: stations={len(rail_stations)} lines={len(gtfs._rail_routes)} groups={len(rail_groups)} "
-          f"linked_bus_groups={len(bus_to_rail)}")
+          f"linked_bus_groups={len(bus_to_rail)} interchanges={len(rail_interchanges)}")
     print(f"wrote {OUT_FILE} ({size_kb:.0f} KB)")
 
 

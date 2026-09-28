@@ -173,6 +173,18 @@ _rail_to_bus: dict[str, list[str]] = {}  # rail StationGroup.name -> [nearby bus
 _bus_group_by_display_name: dict[str, StopGroup] = {}  # StopGroup.name -> group, built at load time
 _rail_group_by_display_name: dict[str, RailStationGroup] = {}  # RailStationGroup.name -> group
 
+# Cross-line interchanges GTFS doesn't encode directly: two DIFFERENTLY
+# named rail station groups within real walking distance of each other
+# (built at build_static.py time — see _build_rail_interchanges there —
+# from plain geography, e.g. Muzium Negara <-> KL Sentral, ~500m). A
+# SAME-named station served by multiple lines (e.g. Masjid Jamek, Pasar
+# Seni) is already one RailStationGroup via _build_rail_station_groups, so
+# that kind of interchange needs no separate edge here.
+_walk_links: dict[str, list[tuple[str, float]]] = {}  # RailStationGroup.name -> [(other name, meters)]
+_station_group_by_id: dict[str, RailStationGroup] = {}  # rail station_id -> its RailStationGroup
+_station_lines: dict[str, set[str]] = {}  # rail station_id -> {line_id, ...} serving it
+_interchange_groups: set[str] = set()  # RailStationGroup names where a line change is actually possible
+
 _loaded = False
 
 
@@ -533,10 +545,38 @@ def _load_static() -> None:
     _rail_to_bus.update(rail.get("rail_to_bus", {}))
     _bus_group_by_display_name.update({g.name: g for g in _groups_by_name.values()})
     _rail_group_by_display_name.update({g.name: g for g in _rail_groups_by_name.values()})
+    for edge in rail.get("interchanges", []):
+        _walk_links.setdefault(edge["a"], []).append((edge["b"], edge["meters"]))
+        _walk_links.setdefault(edge["b"], []).append((edge["a"], edge["meters"]))
 
     _build_word_index()
+    _build_interchange_index()
     _load_aliases()
     _loaded = True
+
+
+def _build_interchange_index() -> None:
+    """Runtime, cheap (a couple of passes over the rail data already
+    loaded): which station a line-change is actually possible at — either
+    because its RailStationGroup already spans >=2 lines (Masjid Jamek,
+    Pasar Seni) or because it has a walk link (_walk_links) to one that
+    does. _rail_journeys uses this to skip the vast majority of a rail
+    line's stations when hunting for a one-change route, instead of trying
+    every stop as a hypothetical transfer point."""
+    for path_key, path in _rail_paths.items():
+        line_id = path_key.rsplit("_", 1)[0]
+        for station_id in path:
+            _station_lines.setdefault(station_id, set()).add(line_id)
+
+    for group in _rail_groups_by_name.values():
+        for station_id in group.station_ids:
+            _station_group_by_id[station_id] = group
+        lines_here: set[str] = set()
+        for station_id in group.station_ids:
+            lines_here |= _station_lines.get(station_id, set())
+        if len(lines_here) >= 2:
+            _interchange_groups.add(group.name)
+    _interchange_groups.update(_walk_links.keys())
 
 
 # ----------------------------------------------------------------- find_stop
@@ -1400,6 +1440,77 @@ def _rail_direct_options(from_group: RailStationGroup, to_group: RailStationGrou
     return options
 
 
+MAX_RAIL_JOURNEYS = 3  # candidates kept per (start, end) pair — plan_trip only ever shows 2 options total anyway
+TRANSFER_STOP_PENALTY = 2  # "stops" a rail line change is worth, for ranking a 1-change journey against a direct one
+
+
+def _rail_journeys(start: RailStationGroup, end: RailStationGroup) -> list[dict]:
+    """Rail-only paths from start to end: direct (no line change) first,
+    then — since GTFS doesn't encode cross-line walkways directly — a
+    single change either at a same-named, multi-line station (Masjid
+    Jamek, Pasar Seni: free, both lines are on the same RailStationGroup
+    already) or via a short walk between two differently-named stations
+    within ~500m (_walk_links; e.g. Muzium Negara <-> KL Sentral — built at
+    build_static.py time from plain geography). At most ONE line change —
+    this app doesn't chain further transfers. Returns ranked dicts
+    {"steps": [("rail"|"walk", ...), ...], "stops": int, "transfers": int},
+    best (fewest stops, then fewest transfers) first, capped at
+    MAX_RAIL_JOURNEYS so a caller with many interchange options doesn't
+    balloon plan_trip's result set."""
+    journeys: list[dict] = []
+
+    for line_id, direction_id, board_idx, alight_idx in _rail_direct_options(start, end):
+        journeys.append({
+            "steps": [("rail", line_id, direction_id, board_idx, alight_idx, start.name, end.name)],
+            "stops": alight_idx - board_idx,
+            "transfers": 0,
+        })
+
+    if start.name != end.name:
+        for path_key1, path1 in _rail_paths.items():
+            line1_id, dir1_s = path_key1.rsplit("_", 1)
+            dir1 = int(dir1_s)
+            start_positions = [i for i, sid in enumerate(path1) if sid in start.station_ids]
+            if not start_positions:
+                continue
+            for i in start_positions:
+                for j in range(i + 1, len(path1)):
+                    xg = _station_group_by_id.get(path1[j])
+                    if xg is None or xg.name == start.name or xg.name not in _interchange_groups:
+                        continue
+                    stops1 = j - i
+                    for yg_name, _walk_m in [(xg.name, 0.0)] + _walk_links.get(xg.name, []):
+                        yg = _rail_group_by_display_name.get(yg_name)
+                        if yg is None or yg.name == start.name:
+                            continue
+                        for line2_id, dir2, k, l in _rail_direct_options(yg, end):
+                            if line2_id == line1_id and dir2 == dir1:
+                                continue  # same line+direction throughout — not a real change
+                            steps = [("rail", line1_id, dir1, i, j, start.name, xg.name)]
+                            if yg_name != xg.name:
+                                steps.append(("walk", _walk_m, xg.name, yg_name))
+                            steps.append(("rail", line2_id, dir2, k, l, yg_name, end.name))
+                            journeys.append({"steps": steps, "stops": stops1 + (l - k), "transfers": 1})
+
+    journeys.sort(key=lambda j: (j["stops"] + j["transfers"] * TRANSFER_STOP_PENALTY, j["transfers"]))
+    return journeys[:MAX_RAIL_JOURNEYS]
+
+
+def _walk_extended(groups: list[RailStationGroup]) -> list[tuple[RailStationGroup, float]]:
+    """groups, plus any RailStationGroup within a short walk of one of them
+    (_walk_links), each paired with the walk distance actually needed from
+    that arrival point to the caller's real stop — 0.0 for the groups
+    already directly linked. Used so plan_trip can still route through (or
+    end at) a station like Muzium Negara that isn't itself within the
+    tighter bus<->rail walking threshold, and say so as an explicit step."""
+    best: dict[str, float] = {g.name: 0.0 for g in groups}
+    for g in groups:
+        for name, meters in _walk_links.get(g.name, []):
+            if name not in best or meters < best[name]:
+                best[name] = meters
+    return [(_rail_group_by_display_name[name], meters) for name, meters in best.items() if name in _rail_group_by_display_name]
+
+
 def _linked_rail_groups(bus_group: StopGroup) -> list[RailStationGroup]:
     names = _bus_to_rail.get(bus_group.name, [])
     return [_rail_group_by_display_name[n] for n in names if n in _rail_group_by_display_name]
@@ -1451,6 +1562,11 @@ def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int,
     }
 
 
+def _walk_step(meters: float, from_name: str, to_name: str) -> dict:
+    minutes = max(1, round(meters / WALK_SPEED_MPS / 60))
+    return {"mode": "walk", "board_at": from_name, "alight_at": to_name, "meters": round(meters), "minutes": minutes}
+
+
 def _bus_step(route_id: str, direction_id: int, board_stop_id: str, board_name: str, alight_name: str) -> dict | None:
     """None if no live vehicle can back up this leg with an ETA — the
     caller drops the whole option rather than announce a boarding time it
@@ -1490,16 +1606,33 @@ def _rail_inclusive_options(
     that need an actual bus stop to board or alight at."""
     from_name = from_group.name if from_group else None
     to_name = to_group.name if to_group else None
-    results: list[list[tuple]] = []
+    # The bare-station case (a caller-named station with no matching bus
+    # platform — see _resolve_trip_endpoint) leaves from_group/to_group
+    # None but from_rail/to_rail holding exactly that one named station;
+    # everywhere below needs a label for "where the walk starts/ends" even
+    # when there's no bus stop to name.
+    origin_label = from_name or (from_rail[0].name if from_rail else "")
+    dest_label = to_name or (to_rail[0].name if to_rail else "")
+    from_rail_ext = _walk_extended(from_rail) if from_rail else []
+    to_rail_ext = _walk_extended(to_rail) if to_rail else []
+    results: list[dict] = []
 
-    for fr in from_rail:
-        for tr in to_rail:
-            for line_id, direction_id, board_idx, alight_idx in _rail_direct_options(fr, tr):
-                results.append([("rail", line_id, direction_id, board_idx, alight_idx, fr.name, tr.name)])
+    # rail-only: both ends within reach of a station, walking distance or
+    # (via _walk_extended) a short interchange walk beyond that.
+    for fr, walk_in in from_rail_ext:
+        for tr, walk_out in to_rail_ext:
+            for journey in _rail_journeys(fr, tr):
+                steps = list(journey["steps"])
+                if walk_in:
+                    steps.insert(0, ("walk", walk_in, origin_label, fr.name))
+                if walk_out:
+                    steps.append(("walk", walk_out, tr.name, dest_label))
+                results.append({"steps": steps, "stops": journey["stops"], "transfers": journey["transfers"] + bool(walk_in) + bool(walk_out)})
 
     # bus -> rail: direct bus from from_group to a stop near some station,
-    # then that station's line toward one near to_group.
-    if to_rail and from_group is not None:
+    # then a rail journey (direct, or one line change) toward a station
+    # near to_group.
+    if to_rail_ext and from_group is not None:
         for rail_name, bus_names in _rail_to_bus.items():
             station_group = _rail_group_by_display_name.get(rail_name)
             if station_group is None:
@@ -1512,16 +1645,16 @@ def _rail_inclusive_options(
                 if not bus_legs:
                     continue
                 route_id, direction_id, board_stop_id = bus_legs[0]
-                for tr in to_rail:
-                    for line_id, r_dir, board_idx, alight_idx in _rail_direct_options(station_group, tr):
-                        results.append([
-                            ("bus", route_id, direction_id, board_stop_id, from_group.name, transfer_group.name),
-                            ("rail", line_id, r_dir, board_idx, alight_idx, station_group.name, tr.name),
-                        ])
-                break  # one transfer candidate at this station is enough
+                for tr, walk_out in to_rail_ext:
+                    for journey in _rail_journeys(station_group, tr):
+                        steps = [("bus", route_id, direction_id, board_stop_id, from_group.name, transfer_group.name), *journey["steps"]]
+                        if walk_out:
+                            steps.append(("walk", walk_out, tr.name, dest_label))
+                        results.append({"steps": steps, "stops": journey["stops"], "transfers": 1 + journey["transfers"] + bool(walk_out)})
+                break  # one bus-side transfer candidate at this station is enough
 
     # rail -> bus: symmetric.
-    if from_rail and to_group is not None:
+    if from_rail_ext and to_group is not None:
         for rail_name, bus_names in _rail_to_bus.items():
             station_group = _rail_group_by_display_name.get(rail_name)
             if station_group is None:
@@ -1534,15 +1667,26 @@ def _rail_inclusive_options(
                 if not bus_legs:
                     continue
                 route_id, direction_id, board_stop_id = bus_legs[0]
-                for fr in from_rail:
-                    for line_id, r_dir, board_idx, alight_idx in _rail_direct_options(fr, station_group):
-                        results.append([
-                            ("rail", line_id, r_dir, board_idx, alight_idx, fr.name, station_group.name),
-                            ("bus", route_id, direction_id, board_stop_id, transfer_group.name, to_group.name),
-                        ])
+                for fr, walk_in in from_rail_ext:
+                    for journey in _rail_journeys(fr, station_group):
+                        steps = list(journey["steps"])
+                        if walk_in:
+                            steps.insert(0, ("walk", walk_in, origin_label, fr.name))
+                        steps.append(("bus", route_id, direction_id, board_stop_id, transfer_group.name, to_group.name))
+                        results.append({"steps": steps, "stops": journey["stops"], "transfers": 1 + journey["transfers"] + bool(walk_in)})
                 break
 
-    return results
+    results.sort(key=lambda r: (r["transfers"], r["stops"]))
+    return [r["steps"] for r in results[:MAX_RAIL_JOURNEYS]]
+
+
+def _debug_step_summary(t: tuple) -> dict:
+    if t[0] == "bus":
+        return {"mode": "bus", "route": _routes.get(t[1], {}).get("short_name", t[1]), "from": t[4], "to": t[5]}
+    if t[0] == "walk":
+        return {"mode": "walk", "meters": round(t[1]), "from": t[2], "to": t[3]}
+    line = _rail_routes.get(t[1], {})
+    return {"mode": "rail", "line": _RAIL_PREFIX_RE.sub("", line.get("long_name") or line.get("short_name", t[1])), "from": t[5], "to": t[6]}
 
 
 def debug_trip(from_text: str, to_text: str) -> dict:
@@ -1609,7 +1753,7 @@ def debug_trip(from_text: str, to_text: str) -> dict:
     rail_inclusive = _rail_inclusive_options(from_group, to_group, from_rail, to_rail)
     out["rail_inclusive_options_count"] = len(rail_inclusive)
     out["rail_inclusive_options"] = [
-        [{"mode": t[0], **({"route": _routes.get(t[1], {}).get("short_name", t[1])} if t[0] == "bus" else {"line": t[1]})} for t in option]
+        [_debug_step_summary(t) for t in option]
         for option in rail_inclusive
     ]
     out["plan_trip_result"] = plan_trip(from_text, to_text)
@@ -1619,8 +1763,20 @@ def debug_trip(from_text: str, to_text: str) -> dict:
 def _step_phrase(step: dict) -> str:
     if step["mode"] == "bus":
         return f"Route {step['route']} from {step['board_at']} to {step['alight_at']}, next one in {step['eta_human']}"
+    if step["mode"] == "walk":
+        return f"walk to {step['alight_at']}, about {step['minutes']} minute{'s' if step['minutes'] != 1 else ''}"
     plural = "s" if step["stops"] != 1 else ""
     return f"the {step['line']} toward {step['direction']}, {step['stops']} stop{plural} to {step['to_station']}"
+
+
+def _option_cost(steps: list[dict]) -> tuple[int, int]:
+    """(transfers, rail stops) for ranking a resolved option — mirrors the
+    key _rail_journeys/_rail_inclusive_options already sort candidates by,
+    recomputed here since ETA-filtering (_bus_step returning None) can
+    change which candidates actually survive to this point."""
+    transfers = len(steps) - 1
+    stops = sum(s.get("stops", 0) for s in steps if s["mode"] == "rail")
+    return transfers, stops
 
 
 def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
@@ -1695,6 +1851,9 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
                     resolved_steps = None
                     break
                 resolved_steps.append(bus_step)
+            elif step[0] == "walk":
+                _, meters, leg_from_name, leg_to_name = step
+                resolved_steps.append(_walk_step(meters, leg_from_name, leg_to_name))
             else:
                 _, line_id, r_dir, board_idx, alight_idx, leg_from_name, leg_to_name = step
                 resolved_steps.append(_rail_step(line_id, r_dir, board_idx, alight_idx, leg_from_name, leg_to_name))
@@ -1711,6 +1870,14 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
             "reason": "no_buses_nearby",
             "message": f"There's a route, but no buses are close enough to {from_name} right now for an ETA.",
         }
+
+    # A second option only earns its place if it's genuinely competitive —
+    # not just a strictly-worse rehash (more transfers AND more rail stops)
+    # of the first.
+    if len(resolved) == 2:
+        (t1, s1), (t2, s2) = _option_cost(resolved[0]), _option_cost(resolved[1])
+        if t2 >= t1 and s2 >= s1 and (t2 > t1 or s2 > s1):
+            resolved = resolved[:1]
 
     phrases = [", then ".join(_step_phrase(s) for s in steps) for steps in resolved]
     message = "Take " + phrases[0] + "."
