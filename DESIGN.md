@@ -315,6 +315,13 @@ Icon-pill buttons (dark-mode toggle, cancel, close) run ~40–44px including pad
 - Background `{colors.surface-card-hover}`, rounded `{rounded.pill}`, padding `{spacing.xs} {spacing.sm}`. The icon glyph itself carries the category colour, not the chip.
 
 ### Data Surfaces
+
+**`live-map`** — the trip/stop map in the right panel.
+- Tiles: CARTO Positron (`light_all`), matching `../where-bus`'s own `LiveMap.tsx` tile choice — a greyscale basemap with `&copy; OpenStreetMap contributors &copy; CARTO` attribution, so the tiles themselves carry no colour.
+- Legs: bus polylines `{colors.ink}` (black), weight 5, opacity 0.85. Rail polylines use that line's own official GTFS `route_color` (e.g. Kajang Line `#047940`) — the one colour accent on the map, same rule as red being the one accent reserved for the live-call badge elsewhere.
+- Markers: Start/Transfer/Destination are always-labelled pins (`{colors.ink}` for Start/Destination, `{colors.text-secondary}` for Transfer), never an unlabelled dot a rider has to tap to identify. Live vehicles are small unlabelled dots, `{colors.ink}` for `rapid-bus-kl`, `{colors.text-secondary}` for `rapid-bus-mrtfeeder` — same category-by-shade convention as `route-badge` elsewhere, not a third colour.
+- The user's own location is a plain `{colors.ink}` dot, not blue — the map has exactly one non-greyscale accent (a rail leg's line colour), full stop.
+
 **`result-card`** — a search-result row (route or stop).
 - Background `rgba(255,255,255,0.7)` over the panel's own translucent surface, text `{colors.foreground}`, rounded `{rounded.xl}`, padding `{spacing.lg}`, 1px `{colors.border-subtle}`, `{shadow.sm}` resting → `{shadow.xl}` + `scale-[1.01]` on hover, `scale-[0.99]` on active.
 

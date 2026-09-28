@@ -40,24 +40,26 @@ class MapStateTests(unittest.TestCase):
                     {
                         "mode": "bus", "route": "T815", "category": "rapid-bus-mrtfeeder",
                         "board_at": "Fakulti Sains Komputer", "alight_at": "MRT Phileo Damansara Pintu A",
-                        "eta_seconds": 480, "eta_human": "8 minutes", "fare": 1.0,
+                        "eta_seconds": 480, "eta_human": "8 minutes",
                     },
                     {
                         "mode": "rail", "line": "Kajang Line", "direction": "Kajang",
                         "from_station": "Phileo Damansara", "to_station": "Pasar Seni",
-                        "stops": 4, "fare": None,
+                        "stops": 4,
                     },
                 ],
-                "fare_total": {"amount": 1.0, "all_known": False},
             }],
         }
         mapstate.set_from_plan_trip(result)
         state = mapstate.get()
 
         self.assertEqual(state["kind"], "trip")
-        self.assertGreaterEqual(len(state["stops"]), 2)
-        self.assertEqual({leg["mode"] for leg in state["legs"]}, {"bus", "rail"})
-        for leg in state["legs"]:
+        option = state["options"][0]
+        self.assertGreaterEqual(len(option["stops"]), 2)
+        self.assertEqual({leg["mode"] for leg in option["legs"]}, {"bus", "rail"})
+        rail_leg = next(leg for leg in option["legs"] if leg["mode"] == "rail")
+        self.assertEqual(rail_leg["color"], "#047940")  # Kajang Line's official GTFS route_color
+        for leg in option["legs"]:
             self.assertGreaterEqual(len(leg["points"]), 2, leg)
             for lat, lon in leg["points"]:
                 self.assertTrue(1.0 < lat < 4.0, lat)  # sanity: within the Klang Valley
@@ -69,15 +71,32 @@ class MapStateTests(unittest.TestCase):
         state = mapstate.get()
 
         self.assertEqual(state["kind"], "stop")
-        self.assertEqual(len(state["stops"]), 1)
-        self.assertEqual(state["stops"][0]["name"], "KL Sentral")
+        self.assertEqual(len(state["options"]), 1)
+        self.assertEqual(state["options"][0]["stops"][0]["name"], "KL Sentral")
 
     def test_failed_result_does_not_touch_existing_state(self):
-        gtfs.next_arrivals("KL Sentral")
         mapstate.set_from_next_arrivals(gtfs.next_arrivals("KL Sentral"))
         before = mapstate.get()
         mapstate.set_from_plan_trip({"ok": False, "reason": "no_direct_route"})
         self.assertEqual(mapstate.get(), before)
+
+    def test_no_live_eta_still_draws_the_structural_route(self):
+        # The exact failure shape plan_trip returns when a route genuinely
+        # exists but no bus is currently tracked close enough for an ETA —
+        # the map should still draw the route, just with no live vehicles
+        # on it, instead of showing nothing at all.
+        result = {
+            "ok": False,
+            "reason": "no_buses_nearby",
+            "message": "There's a route, but no buses are close enough to Fakulti Sains Komputer right now for an ETA.",
+        }
+        args = {"from_stop": "Fakulti Sains Komputer", "to_stop": "Pasar Seni (Platform B5)"}
+        mapstate.set_from_plan_trip(result, args)
+        state = mapstate.get()
+
+        self.assertEqual(state["kind"], "trip")
+        self.assertTrue(state["options"], state)
+        self.assertTrue(any(leg["points"] for leg in state["options"][0]["legs"]))
 
 
 if __name__ == "__main__":

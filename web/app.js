@@ -162,7 +162,7 @@ function addLine(who, text) {
   // Also remembered for the right panel's compact "current trip" summary
   // (see renderTripPanel) — the map's own geometry comes from the server
   // instead (/api/map-state), but this richer result is what the panel's
-  // text needs (eta_human, fare, etc. that map-state doesn't carry).
+  // text needs (eta_human, etc. that map-state doesn't carry).
   if (who === "agent") {
     const arrivalEvent = pending.find(
       (event) => event.tool === "next_arrivals" && event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length
@@ -358,16 +358,7 @@ function tripTotalStops(steps) {
   return steps.reduce((sum, s) => sum + (s.mode === "rail" ? s.stops : 0), 0);
 }
 
-// Only ever shows a number that came from the tool result's own fare_total
-// — never computed or guessed here.
-function fareFootText(fareTotal) {
-  if (!fareTotal || fareTotal.amount == null) return "Fare unknown";
-  return fareTotal.all_known
-    ? `RM ${fareTotal.amount.toFixed(2)} total`
-    : `RM ${fareTotal.amount.toFixed(2)} confirmed — fare partly unknown`;
-}
-
-function renderOneTripCard(option, label) {
+function renderOneTripCard(option, index, label, total) {
   const card = el("div", "trip-card");
   if (label) card.append(el("p", "trip-card-label", label));
 
@@ -385,8 +376,19 @@ function renderOneTripCard(option, label) {
   const foot = el("div", "trip-card-foot");
   const stops = tripTotalStops(option.steps);
   foot.append(el("span", null, stops ? `${stops} stop${stops !== 1 ? "s" : ""}` : "Direct"));
-  foot.append(el("span", null, fareFootText(option.fare_total)));
   card.append(foot);
+
+  // Tapping either card shows that option on the map — only meaningful
+  // (and only made to look clickable) when there's more than one to switch
+  // between.
+  if (total > 1) {
+    card.classList.add("trip-card-selectable");
+    card.addEventListener("click", () => {
+      setActiveOption(index);
+      card.parentElement.querySelectorAll(".trip-card").forEach((c) => c.classList.toggle("trip-card-active", c === card));
+    });
+    if (index === 0) card.classList.add("trip-card-active");
+  }
 
   return card;
 }
@@ -394,9 +396,12 @@ function renderOneTripCard(option, label) {
 // One card per option — alternatives are separate, clearly labelled "Option
 // N" cards, not folded into the first card with an inline "Or:".
 function renderTripCard(result) {
-  const wrap = document.createDocumentFragment();
+  activeOptionIndex = 0; // a fresh trip always starts on its first option
+  const wrap = el("div", "trip-cards");
   wrap.append(el("p", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
-  result.options.forEach((option, i) => wrap.append(renderOneTripCard(option, i === 0 ? null : `Option ${i + 1}`)));
+  result.options.forEach((option, i) =>
+    wrap.append(renderOneTripCard(option, i, i === 0 ? null : `Option ${i + 1}`, result.options.length))
+  );
   return wrap;
 }
 
@@ -798,59 +803,110 @@ setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on 
 
 // --------------------------------------------------------------- live map
 //
-// Leaflet + OpenStreetMap tiles, read-only — panning/zooming only, no
-// editing. Geometry comes from /api/map-state (app/mapstate.py): stop-to-
-// stop polylines built from coordinates already loaded for the ETA engine,
-// never the full GTFS shape files, so this adds no real memory over what
-// next_arrivals already needed. Polled on the same ~400ms cadence as
-// /api/events while a call is live; map-state itself is cheap (no network
-// call to data.gov.my, just a read of whatever's cached).
+// Leaflet, read-only — panning/zooming only, no editing. Tiles match
+// ../where-bus's own choice (checked its LiveMap.tsx): CARTO Positron, a
+// greyscale basemap, so the map itself carries no colour and a rail line's
+// official colour reads as the one accent on the page, not one of several.
+// Geometry comes from /api/map-state (app/mapstate.py): stop-to-stop
+// polylines built from coordinates already loaded for the ETA engine, never
+// the full GTFS shape files — no memory cost beyond what next_arrivals
+// already needed. Polled on MAP_POLL_MS; map-state itself is cheap (no
+// network call to data.gov.my, just a read of whatever's cached).
 
 let map = null;
 let mapLayers = [];
+let lastMapState = null;
+let activeOptionIndex = 0;
 
 function initMap() {
   if (typeof L === "undefined" || map) return; // CDN blocked/slow — page still works without it
   map = L.map("map", { attributionControl: true }).setView([3.139, 101.6869], 12); // Kuala Lumpur
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
+      '&copy; <a href="https://carto.com/attributions">CARTO</a>',
     maxZoom: 19,
   }).addTo(map);
 }
 
+// Small always-visible dot; used for live vehicles, where a text label per
+// bus would clutter the map more than it helps.
 function mapDot(cls) {
   return L.divIcon({ className: "", html: `<span class="map-dot ${cls}"></span>`, iconSize: [14, 14] });
 }
 
-const LEG_COLOR = { bus: "#111827", rail: "#2563eb" };
+// A labelled pin — Start/Transfer/Destination need to read at a glance, not
+// require a tap/hover to identify, so the label is baked into the icon
+// itself rather than a tooltip.
+function mapPin(label, cls) {
+  return L.divIcon({
+    className: "",
+    html: `<div class="map-pin ${cls}"><span class="map-pin-dot"></span><span class="map-pin-label">${label}</span></div>`,
+    iconSize: null,
+    iconAnchor: [7, 7],
+  });
+}
+
+const ROLE_LABEL = { board: "Start", transfer: "Transfer", alight: "Destination" };
+const ROLE_CLASS = { board: "start", transfer: "transfer", alight: "destination", stop: "stop" };
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function setActiveOption(index) {
+  activeOptionIndex = index;
+  if (lastMapState) renderMap(lastMapState);
+}
 
 function renderMap(state) {
+  lastMapState = state;
   if (!map) return;
   for (const layer of mapLayers) map.removeLayer(layer);
   mapLayers = [];
 
+  const options = state.options || [];
+  const option = options[Math.min(activeOptionIndex, options.length - 1)] || options[0];
+
   const bounds = [];
   const addBounds = (lat, lon) => bounds.push([lat, lon]);
 
-  if (state.location) {
+  for (const stop of (option && option.stops) || []) {
+    const label = ROLE_LABEL[stop.role] || stop.name;
+    mapLayers.push(L.marker([stop.lat, stop.lon], { icon: mapPin(label, ROLE_CLASS[stop.role] || "stop") }).addTo(map));
+    addBounds(stop.lat, stop.lon);
+  }
+  for (const leg of (option && option.legs) || []) {
+    if (!leg.points || !leg.points.length) continue;
+    const color = leg.mode === "rail" ? leg.color || "#6b7280" : "#111827";
+    mapLayers.push(L.polyline(leg.points, { color, weight: 5, opacity: 0.85 }).addTo(map));
+    leg.points.forEach(([lat, lon]) => addBounds(lat, lon));
+  }
+  for (const v of (option && option.vehicles) || []) {
+    const cls = v.category === "rapid-bus-mrtfeeder" ? "vehicle-feeder" : "vehicle";
+    mapLayers.push(L.marker([v.lat, v.lon], { icon: mapDot(cls) }).bindTooltip(`Route ${v.route}`).addTo(map));
+  }
+
+  // The user's own location only helps fit the view when it's actually
+  // near the trip — testing from across the country (or just a stale/
+  // inaccurate reading) shouldn't zoom the map out to a useless country-
+  // wide view.
+  if (state.location && bounds.length) {
+    const nearAny = bounds.some(([lat, lon]) => haversineKm(state.location.lat, state.location.lon, lat, lon) <= 50);
+    if (nearAny) {
+      mapLayers.push(L.marker([state.location.lat, state.location.lon], { icon: mapDot("you") }).addTo(map));
+      addBounds(state.location.lat, state.location.lon);
+    }
+  } else if (state.location && !bounds.length) {
     mapLayers.push(L.marker([state.location.lat, state.location.lon], { icon: mapDot("you") }).addTo(map));
     addBounds(state.location.lat, state.location.lon);
   }
-  for (const stop of state.stops || []) {
-    mapLayers.push(L.marker([stop.lat, stop.lon], { icon: mapDot("stop") }).bindTooltip(stop.name).addTo(map));
-    addBounds(stop.lat, stop.lon);
-  }
-  for (const leg of state.legs || []) {
-    if (!leg.points || !leg.points.length) continue;
-    const color = leg.mode === "rail" ? LEG_COLOR.rail : LEG_COLOR.bus;
-    mapLayers.push(L.polyline(leg.points, { color, weight: 4, opacity: 0.85 }).addTo(map));
-    leg.points.forEach(([lat, lon]) => addBounds(lat, lon));
-  }
-  for (const v of state.vehicles || []) {
-    mapLayers.push(L.marker([v.lat, v.lon], { icon: mapDot("vehicle") }).bindTooltip(`Route ${v.route}`).addTo(map));
-  }
 
-  if (bounds.length) map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16, animate: false });
+  if (bounds.length) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16, animate: false });
 }
 
 async function pollMapState() {
@@ -869,7 +925,7 @@ setInterval(pollMapState, MAP_POLL_MS);
 // The right panel's compact "current trip" summary — reuses the same
 // step-row markup as the old inline card, driven by the richer result
 // addLine() already tracked in lastLiveEvent (map-state's own payload is
-// geometry-only, no eta_human/fare/etc.).
+// geometry-only, no eta_human/etc.).
 function renderTripPanel() {
   const panel = document.getElementById("trip-panel");
   panel.textContent = "";

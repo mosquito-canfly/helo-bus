@@ -822,6 +822,17 @@
       .trip-card + .trip-card {
         margin-top: var(--space-sm);
       }
+      .trip-card-selectable {
+        cursor: pointer;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      .trip-card-selectable:hover {
+        border-color: var(--color-text-secondary);
+      }
+      .trip-card-selectable.trip-card-active {
+        border-color: var(--color-ink);
+        box-shadow: 0 0 0 1px var(--color-ink);
+      }
       .trip-card-label {
         font-size: var(--type-caption-size);
         font-weight: 700;
@@ -896,25 +907,66 @@
       }
       /* Leaflet's own default marker icons are shipped as separate image
          files this app doesn't vendor — divIcon markers below are styled
-         here instead of pulling in leaflet's images/ assets. */
+         here instead of pulling in leaflet's images/ assets.
+
+         Black/white/grey only, per DESIGN.md — red stays reserved for the
+         live-call badge alone, and a rail leg's own official line colour
+         (set inline per-polyline, not here) is the one other accent. */
       .map-dot {
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
         border-radius: 50%;
         border: 2px solid #ffffff;
         box-shadow: var(--shadow-sm);
+        background: var(--color-text-muted);
       }
       .map-dot.you {
-        background: #2563eb;
-      }
-      .map-dot.stop {
         background: var(--color-ink);
+        width: 14px;
+        height: 14px;
       }
       .map-dot.vehicle {
+        background: var(--color-ink);
+      }
+      .map-dot.vehicle-feeder {
+        background: var(--color-text-secondary);
+      }
+
+      /* Start/Transfer/Destination — an always-visible label baked into the
+         icon itself, not a tiny dot needing a tap or hover to identify. */
+      .map-pin {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transform: translateY(-2px);
+      }
+      .map-pin-dot {
         width: 10px;
         height: 10px;
-        background: var(--color-live);
-        border-width: 1.5px;
+        border-radius: 50%;
+        border: 2px solid #ffffff;
+        box-shadow: var(--shadow-sm);
+        background: var(--color-ink);
+        flex: none;
+      }
+      .map-pin-label {
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 700;
+        color: #ffffff;
+        background: var(--color-ink);
+        padding: 2px 7px;
+        border-radius: var(--radius-pill);
+        white-space: nowrap;
+        box-shadow: var(--shadow-sm);
+      }
+      .map-pin.transfer .map-pin-dot,
+      .map-pin.transfer .map-pin-label {
+        background: var(--color-text-secondary);
+      }
+      .map-pin.stop .map-pin-dot,
+      .map-pin.stop .map-pin-label {
+        background: var(--color-ink);
       }
 
       .trip-panel {
@@ -1599,6 +1651,6 @@
     <!-- Bump this query on every app.js edit — without it, browsers cache
          the old script indefinitely and a shipped fix can silently not run
          for returning visitors (this is why "How it works" looked broken). -->
-    <script src="/app.js?v=8"></script>
+    <script src="/app.js?v=9"></script>
   </body>
 </html>

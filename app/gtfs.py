@@ -358,10 +358,18 @@ def _project_stops_onto_shape(
 
 
 def _build_stop_index() -> None:
+    """One (route_id, direction_id) entry per stop_id, even for a loop route
+    that revisits the same physical stop more than once in its path — a
+    duplicate entry here meant next_arrivals asked _arrivals_for the exact
+    same question twice and announced the same bus arriving twice ("Route
+    T815 in 3 minutes, Route T815 in 3 minutes"). Which occurrence in the
+    path a given vehicle is actually approaching is _stop_positions'/
+    _arrivals_for's job, not this index's."""
     for path_key, stop_ids in _route_paths.items():
         route_id, direction_id = path_key.rsplit("_", 1)
-        for stop_id in stop_ids:
-            _stop_to_routes.setdefault(stop_id, []).append((route_id, int(direction_id)))
+        key = (route_id, int(direction_id))
+        for stop_id in set(stop_ids):
+            _stop_to_routes.setdefault(stop_id, []).append(key)
 
 
 def _load_rail_static() -> None:
@@ -379,9 +387,11 @@ def _load_rail_static() -> None:
             "lon": float(row["stop_lon"]),
         }
     for row in _read_csv(RAIL_CATEGORY, "routes.txt"):
+        color = row.get("route_color", "").strip()
         _rail_routes[row["route_id"]] = {
             "short_name": row["route_short_name"].strip(),
             "long_name": row["route_long_name"].strip(),
+            "color": f"#{color}" if color else None,  # official line colour, map-only — not part of any tool response
         }
 
     target_trips: dict[str, tuple[str, int]] = {}  # trip_id -> (route_id, direction_id)
@@ -889,13 +899,18 @@ def _smooth(vehicle_id: str, stop_id: str, raw_seconds: int) -> int:
     return round(sum(history) / len(history))
 
 
-def _stop_position(path_key: str, stop_id: str) -> tuple[float, int] | None:
+def _stop_positions(path_key: str, stop_id: str) -> list[tuple[float, int]]:
+    """Every position stop_id occupies on this route-direction's path — a
+    loop route can revisit the same physical stop more than once (e.g. T815
+    passes Perpustakaan Um at both index 8 and 17 of its own path), and a
+    vehicle currently between two such visits has genuinely NOT passed the
+    stop yet; picking only the first occurrence (the old behaviour) made
+    _arrivals_for wrongly call it 'already passed'."""
     path = _route_paths.get(path_key)
     distances = _stop_cum_dist.get(path_key)
-    if not path or not distances or stop_id not in path:
-        return None
-    idx = path.index(stop_id)
-    return distances[idx], idx
+    if not path or not distances:
+        return []
+    return [(distances[i], i) for i, sid in enumerate(path) if sid == stop_id]
 
 
 def _project_vehicle(path_key: str, lat: float, lon: float) -> tuple[float, int] | None:
@@ -925,23 +940,28 @@ def _eta_human(seconds: int, distance_m: float) -> str:
 
 def _arrivals_for(route_id: str, direction_id: int, stop_id: str, route_short_name: str) -> list[dict]:
     path_key = f"{route_id}_{direction_id}"
-    target = _stop_position(path_key, stop_id)
+    targets = _stop_positions(path_key, stop_id)
 
     results = []
     for vehicle_id, vehicle in _vehicles.items():
         if vehicle["route_id"] != route_id or vehicle["direction_id"] != direction_id:
             continue
 
-        if target is not None:
+        if targets:
             projected = _project_vehicle(path_key, vehicle["lat"], vehicle["lon"])
         else:
             projected = None
 
-        if target is not None and projected is not None:
+        if targets and projected is not None:
             bus_dist, _bus_idx = projected
-            target_dist, _target_idx = target
-            if bus_dist >= target_dist:
-                continue  # already passed
+            # A loop route can pass this stop more than once — use whichever
+            # occurrence is next ahead of the bus, not just the first one in
+            # the path, or a bus approaching a later visit reads as having
+            # already passed an earlier one it's nowhere near yet.
+            upcoming = [d for d, _i in targets if d > bus_dist]
+            if not upcoming:
+                continue  # passed every occurrence of this stop on this loop
+            target_dist = min(upcoming)
             distance_m = (target_dist - bus_dist) * 1000.0
         else:
             stop = _stops.get(stop_id)
@@ -964,6 +984,128 @@ def _arrivals_for(route_id: str, direction_id: int, stop_id: str, route_short_na
         )
 
     return results
+
+
+def debug_stop(name: str) -> dict:
+    """Diagnostic-only: why did next_arrivals/plan_trip include or exclude
+    each live vehicle for this stop, right now. Mirrors _arrivals_for's own
+    logic exactly (so the reasons are trustworthy) but never mutates
+    anything — in particular it must NOT call _smooth(), which appends to
+    _eta_history as a side effect; a debug call must not skew the rolling
+    average a real tool call later reads. Not a tool: no agent ever calls
+    this, it exists for /api/debug/stop."""
+    _load_static()
+    group, error = _resolve_group(name)
+    if error:
+        return {"ok": False, "stop": name, "error": error}
+
+    # (route_id, direction_id, stop_id) for every route-direction serving
+    # any physical stop in this group — duplicated across stop_ids collapses
+    # to one entry per (route_id, direction_id), keeping the first stop_id.
+    seen: dict[tuple[str, int], str] = {}
+    for stop_id in group.stop_ids:
+        for r_id, direction_id in _stop_to_routes.get(stop_id, []):
+            seen.setdefault((r_id, direction_id), stop_id)
+
+    categories_needed = {_routes.get(r_id, {}).get("category") for (r_id, _d) in seen}
+    within_hours, next_start = _service_window()
+    ensure_fresh(categories_needed)
+    now = time.time()
+
+    feeds = []
+    for category in sorted(categories_needed):
+        if category is None:
+            continue
+        last_fetch = _last_fetch.get(category)
+        feeds.append({
+            "category": category,
+            "fetched_ok_last_attempt": _category_ok.get(category, False),
+            "age_seconds": round(now - last_fetch, 1) if last_fetch else None,
+            "in_backoff": now < _rt_backoff_until.get(category, 0),
+            "has_cached_vehicles": any(v["route_id"] in {r for r, _d in seen if _routes.get(r, {}).get("category") == category} for v in _vehicles.values()),
+        })
+
+    routes = [
+        {
+            "route_id": r_id,
+            "route_short_name": _routes.get(r_id, {}).get("short_name", r_id),
+            "category": _routes.get(r_id, {}).get("category"),
+            "direction_id": direction_id,
+            "board_stop_id": stop_id,
+        }
+        for (r_id, direction_id), stop_id in sorted(seen.items())
+    ]
+
+    route_ids_here = {r_id for r_id, _d in seen}
+    vehicles_out = []
+    for vehicle_id, vehicle in _vehicles.items():
+        if vehicle["route_id"] not in route_ids_here:
+            continue  # a different route entirely — not this stop's business
+
+        # A vehicle can be tracked on a route this stop serves but in the
+        # OTHER direction — that's a real, common exclusion reason, so it's
+        # reported per every (route_id, direction_id) this vehicle's route
+        # actually serves here, not just silently skipped.
+        for (r_id, direction_id), stop_id in seen.items():
+            if r_id != vehicle["route_id"]:
+                continue
+            path_key = f"{r_id}_{direction_id}"
+            route_short_name = _routes.get(r_id, {}).get("short_name", r_id)
+            entry = {
+                "vehicle_id": vehicle_id,
+                "route": route_short_name,
+                "route_id": r_id,
+                "vehicle_direction_id": vehicle["direction_id"],
+                "checked_direction_id": direction_id,
+                "seen_age_seconds": round(now - vehicle["seen_at"], 1),
+            }
+            if vehicle["direction_id"] != direction_id:
+                entry["excluded_reason"] = "wrong_direction"
+                vehicles_out.append(entry)
+                continue
+
+            targets = _stop_positions(path_key, stop_id)
+            projected = _project_vehicle(path_key, vehicle["lat"], vehicle["lon"]) if targets else None
+            if targets and projected is not None:
+                bus_dist, bus_idx = projected
+                entry["snapped_route_index"] = bus_idx
+                entry["target_route_indices"] = [i for _d, i in targets]  # >1 means this stop is on a loop
+                upcoming = [d for d, _i in targets if d > bus_dist]
+                if not upcoming:
+                    entry["excluded_reason"] = "passed_stop"
+                    vehicles_out.append(entry)
+                    continue
+                target_dist = min(upcoming)
+                distance_m = (target_dist - bus_dist) * 1000.0
+            else:
+                stop = _stops.get(stop_id)
+                if stop is None:
+                    entry["excluded_reason"] = "no_stop_coordinates"
+                    vehicles_out.append(entry)
+                    continue
+                distance_m = _haversine_km(vehicle["lat"], vehicle["lon"], stop["lat"], stop["lon"]) * 1000.0 * HAVERSINE_ROAD_FACTOR
+                entry["note"] = "no route-shape snap available — haversine fallback"
+
+            raw_seconds = int(distance_m / _speed_mps(vehicle))
+            entry["distance_m"] = round(distance_m, 1)
+            entry["raw_eta_seconds"] = raw_seconds
+            history = _eta_history.get((vehicle_id, stop_id))
+            entry["current_smoothed_eta_seconds"] = round(sum(history) / len(history)) if history else None
+            if raw_seconds > MAX_ETA_SECONDS:
+                entry["excluded_reason"] = ">35_min"
+            else:
+                entry["excluded_reason"] = None  # would be included
+            vehicles_out.append(entry)
+
+    return {
+        "ok": True,
+        "stop": group.name,
+        "within_service_hours": within_hours,
+        "next_service_start": next_start if not within_hours else None,
+        "routes": routes,
+        "feeds": feeds,
+        "vehicles": vehicles_out,
+    }
 
 
 def _service_window() -> tuple[bool, str]:
@@ -1094,31 +1236,6 @@ def _linked_rail_groups(bus_group: StopGroup) -> list[RailStationGroup]:
 
 _RAIL_PREFIX_RE = re.compile(r"^(LRT|MRT|BRT)\s+")
 
-# Fare data: none of the three GTFS feeds (rapid-bus-kl, rapid-bus-mrtfeeder,
-# rapid-rail-kl) ship fare_attributes.txt or fare_rules.txt — checked
-# directly against the downloaded feeds, nothing to compute a per-route or
-# per-OD fare from.
-#
-# The one number below that IS used is an official, citable flat fare:
-# MRT Feeder Bus, RM1.00 per trip — Prasarana's own page,
-# https://www.myrapid.com.my/traveling-with-us/how-to-travel-with-us/rapid-kl/mrt/mrt-feeder-bus
-# (checked 2026-09-28). It applies to every route in rapid-bus-mrtfeeder,
-# since that category IS the MRT Feeder Bus service.
-#
-# rapid-bus-kl fares are NOT one flat rate: Prasarana's own fare page
-# (https://myrapid.com.my/bus-train/rapid-kl/bus/) shows Bandar/Tempatan
-# services at a flat RM1, Ekspres at a flat RM3.80, and Utama services on a
-# zonal RM1-RM3 table — and nothing in the GTFS feed cleanly tags which tier
-# a given route_id belongs to. Rather than guess, every rapid-bus-kl leg's
-# fare is left unknown (None). Same for every rail leg: LRT/MRT/Monorail
-# fares are distance/zone-based per official sources, not a flat rate, and
-# there's no fare table in the feed to compute an exact one from.
-MRTFEEDER_FARE_RM = 1.00
-
-
-def _leg_fare(category: str | None) -> float | None:
-    return MRTFEEDER_FARE_RM if category == "rapid-bus-mrtfeeder" else None
-
 
 def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int, from_name: str, to_name: str) -> dict:
     path_key = f"{line_id}_{direction_id}"
@@ -1133,7 +1250,6 @@ def _rail_step(line_id: str, direction_id: int, board_idx: int, alight_idx: int,
         "from_station": from_name,
         "to_station": to_name,
         "stops": alight_idx - board_idx,
-        "fare": None,  # rail fares are distance/zone-based; not in the feed, not guessed
     }
 
 
@@ -1154,7 +1270,6 @@ def _bus_step(route_id: str, direction_id: int, board_stop_id: str, board_name: 
         "alight_at": alight_name,
         "eta_seconds": best["eta_seconds"],
         "eta_human": best["eta_human"],
-        "fare": _leg_fare(best["category"]),
     }
 
 
@@ -1226,29 +1341,6 @@ def _step_phrase(step: dict) -> str:
         return f"Route {step['route']} from {step['board_at']} to {step['alight_at']}, next one in {step['eta_human']}"
     plural = "s" if step["stops"] != 1 else ""
     return f"the {step['line']} toward {step['direction']}, {step['stops']} stop{plural} to {step['to_station']}"
-
-
-def _step_leg_label(step: dict) -> str:
-    return f"the {step['route']}" if step["mode"] == "bus" else f"the {step['line']}"
-
-
-def _fare_total(steps: list[dict]) -> dict:
-    known = [s["fare"] for s in steps if s.get("fare") is not None]
-    return {"amount": round(sum(known), 2) if known else None, "all_known": len(known) == len(steps)}
-
-
-def _fare_phrase(steps: list[dict]) -> str:
-    """Only ever states a fare that came from a step's own 'fare' field —
-    never invents or estimates one for a leg that doesn't have it."""
-    known = [s for s in steps if s.get("fare") is not None]
-    unknown = [s for s in steps if s.get("fare") is None]
-    if not unknown:
-        total = sum(s["fare"] for s in known)
-        return f" Fare is about RM {total:.2f} in total."
-    if known:
-        parts = "; ".join(f"{_step_leg_label(s)} fare is RM {s['fare']:.2f}" for s in known)
-        return f" {parts[0].upper()}{parts[1:]}; the rest of the fare isn't in my data."
-    return ""
 
 
 def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
@@ -1326,7 +1418,6 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
 
     phrases = [", then ".join(_step_phrase(s) for s in steps) for steps in resolved]
     message = "Take " + phrases[0] + "."
-    message += _fare_phrase(resolved[0])
     if len(phrases) > 1:
         message += " Or " + phrases[1] + "."
     if stale:
@@ -1336,7 +1427,7 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
         "ok": True,
         "from_stop": from_group.name,
         "to_stop": to_group.name,
-        "options": [{"steps": steps, "fare_total": _fare_total(steps)} for steps in resolved],
+        "options": [{"steps": steps} for steps in resolved],
         "message": message,
     }
 

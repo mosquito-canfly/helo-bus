@@ -47,7 +47,7 @@ async def record_tool_calls(request, call_next):
     payload = b"".join([chunk async for chunk in response.body_iterator])
     store.log_event(request.url.path, body, payload)
     insights.log_event(request.url.path, body, payload)  # best-effort; never raises
-    mapstate.update(request.url.path, payload)  # best-effort; never raises
+    mapstate.update(request.url.path, body, payload)  # best-effort; never raises
     return Response(
         content=payload,
         status_code=response.status_code,
@@ -184,6 +184,16 @@ def api_token() -> dict:
     if resp.status_code >= 400:
         raise HTTPException(resp.status_code, f"Token request failed: {resp.text}")
     return {"token": resp.json()["token"]}
+
+
+@app.get("/api/debug/stop")
+def api_debug_stop(name: str) -> dict:
+    """Diagnostic only, not a tool the agent can call: exactly why each live
+    vehicle on this stop's routes was included or excluded from next_arrivals
+    right now — which feeds were fetched, their age, snapped distance, ETA,
+    and the precise exclusion reason (wrong direction, already passed, over
+    35 min, not fetched). See gtfs.debug_stop."""
+    return gtfs.debug_stop(name)
 
 
 @app.get("/api/map-state")

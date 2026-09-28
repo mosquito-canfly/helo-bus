@@ -7,7 +7,7 @@
 // browser install a new service worker at all; activate() below then wipes
 // the old cache so returning visitors get the update instead of a stale
 // shell forever.
-const CACHE_VERSION = "helo-buskl-shell-v1";
+const CACHE_VERSION = "helo-buskl-shell-v2";
 const SHELL_FILES = [
   "/",
   "/insights",
