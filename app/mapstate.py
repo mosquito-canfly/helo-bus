@@ -142,7 +142,9 @@ def _structural_step_candidates(from_group: gtfs.StopGroup, to_group: gtfs.StopG
         for route_id, direction_id, board_stop_id in gtfs._direct_route_options(from_group, to_group)
     ]
     if len(candidates) < 2:
-        candidates += gtfs._rail_inclusive_options(from_group, to_group)
+        from_rail = gtfs._linked_rail_groups(from_group)
+        to_rail = gtfs._linked_rail_groups(to_group)
+        candidates += gtfs._rail_inclusive_options(from_group, to_group, from_rail, to_rail)
     return candidates[:2]
 
 

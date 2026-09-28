@@ -16,7 +16,7 @@ from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
@@ -184,6 +184,17 @@ def api_token() -> dict:
     if resp.status_code >= 400:
         raise HTTPException(resp.status_code, f"Token request failed: {resp.text}")
     return {"token": resp.json()["token"]}
+
+
+@app.get("/api/debug/trip")
+def api_debug_trip(from_stop: str = Query("", alias="from"), to: str = "") -> dict:
+    """Diagnostic only, not a tool the agent can call: why plan_trip did or
+    didn't find a route between these two stops right now — every route
+    touching the origin and whether/where it reaches the destination
+    (checking every occurrence on a loop route, not just the first), linked
+    rail stations on both ends, and the actual live plan_trip result for
+    comparison. See gtfs.debug_trip. Query params: from, to."""
+    return gtfs.debug_trip(from_stop, to)
 
 
 @app.get("/api/debug/stop")

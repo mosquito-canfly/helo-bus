@@ -663,6 +663,32 @@ def _resolve_group(stop_text: str) -> tuple[StopGroup | None, dict | None]:
     return matches[0], None
 
 
+def _resolve_rail_group(stop_text: str) -> RailStationGroup | None:
+    """Exact-name-only rail fallback for plan_trip: a caller naming an
+    interchange by its rail name ("Pasar Seni") often has no single matching
+    bus platform — ambiguous among many platform-specific stops — so this
+    lets plan_trip treat the station itself as the endpoint instead of
+    erroring out on the bus-side ambiguity."""
+    normalized = _normalize(stop_text)
+    normalized = ALIASES.get(normalized, normalized)
+    return _rail_groups_by_name.get(normalized)
+
+
+def _resolve_trip_endpoint(stop_text: str) -> tuple[StopGroup | None, RailStationGroup | None, dict | None]:
+    """plan_trip's endpoint resolver: a clean bus-stop match wins as before;
+    failing that, an exact rail-station-name match (e.g. "Pasar Seni", which
+    has no single matching bus platform — see _resolve_rail_group) lets the
+    trip still be planned with that end anchored on the station itself.
+    Only errors (not_found/ambiguous_stop) when neither resolves."""
+    group, error = _resolve_group(stop_text)
+    if group:
+        return group, None, None
+    rail_group = _resolve_rail_group(stop_text)
+    if rail_group:
+        return None, rail_group, None
+    return None, None, error
+
+
 # Spoken letters/digits STT sometimes spells out instead of transcribing as
 # the compact route code ("tea eight one five" rather than "T815").
 _SPOKEN_LETTERS = {
@@ -1273,14 +1299,25 @@ def _bus_step(route_id: str, direction_id: int, board_stop_id: str, board_name: 
     }
 
 
-def _rail_inclusive_options(from_group: StopGroup, to_group: StopGroup) -> list[list[tuple]]:
+def _rail_inclusive_options(
+    from_group: StopGroup | None,
+    to_group: StopGroup | None,
+    from_rail: list[RailStationGroup],
+    to_rail: list[RailStationGroup],
+) -> list[list[tuple]]:
     """Fallback tier for plan_trip, only tried when direct bus alone can't
     fill 2 options: rail-only (both ends within walking distance/name match
     of a station) and one-transfer bus<->rail combos. Returns structural
     step-candidates — (mode, ...) tuples, not yet live-checked; the caller
-    resolves each bus leg to a real ETA and drops any option that fails."""
-    from_rail = _linked_rail_groups(from_group)
-    to_rail = _linked_rail_groups(to_group)
+    resolves each bus leg to a real ETA and drops any option that fails.
+
+    from_rail/to_rail are pre-resolved by the caller: usually the group's own
+    linked stations, but a caller-named endpoint like "Pasar Seni" that has
+    no single matching bus platform resolves straight to its rail station,
+    with from_group/to_group left None — that end simply skips the tiers
+    that need an actual bus stop to board or alight at."""
+    from_name = from_group.name if from_group else None
+    to_name = to_group.name if to_group else None
     results: list[list[tuple]] = []
 
     for fr in from_rail:
@@ -1290,14 +1327,14 @@ def _rail_inclusive_options(from_group: StopGroup, to_group: StopGroup) -> list[
 
     # bus -> rail: direct bus from from_group to a stop near some station,
     # then that station's line toward one near to_group.
-    if to_rail:
+    if to_rail and from_group is not None:
         for rail_name, bus_names in _rail_to_bus.items():
             station_group = _rail_group_by_display_name.get(rail_name)
             if station_group is None:
                 continue
             for bus_name in bus_names:
                 transfer_group = _bus_group_by_display_name.get(bus_name)
-                if transfer_group is None or transfer_group.name in (from_group.name, to_group.name):
+                if transfer_group is None or transfer_group.name in (from_name, to_name):
                     continue
                 bus_legs = _direct_route_options(from_group, transfer_group)
                 if not bus_legs:
@@ -1312,14 +1349,14 @@ def _rail_inclusive_options(from_group: StopGroup, to_group: StopGroup) -> list[
                 break  # one transfer candidate at this station is enough
 
     # rail -> bus: symmetric.
-    if from_rail:
+    if from_rail and to_group is not None:
         for rail_name, bus_names in _rail_to_bus.items():
             station_group = _rail_group_by_display_name.get(rail_name)
             if station_group is None:
                 continue
             for bus_name in bus_names:
                 transfer_group = _bus_group_by_display_name.get(bus_name)
-                if transfer_group is None or transfer_group.name in (from_group.name, to_group.name):
+                if transfer_group is None or transfer_group.name in (from_name, to_name):
                     continue
                 bus_legs = _direct_route_options(transfer_group, to_group)
                 if not bus_legs:
@@ -1334,6 +1371,76 @@ def _rail_inclusive_options(from_group: StopGroup, to_group: StopGroup) -> list[
                 break
 
     return results
+
+
+def debug_trip(from_text: str, to_text: str) -> dict:
+    """Diagnostic only, not a tool the agent can call: why plan_trip found
+    (or didn't find) a route between these two stops right now. Shows every
+    route touching the from-stop and whether/where it reaches the to-stop —
+    checking ALL occurrences of each stop on the path, not just the first,
+    so a loop route's real reach is visible even where the production
+    matcher might still be using only the first one. See /api/debug/trip."""
+    _load_static()
+    from_group, from_rail_direct, from_err = _resolve_trip_endpoint(from_text)
+    to_group, to_rail_direct, to_err = _resolve_trip_endpoint(to_text)
+
+    out: dict = {
+        "from_text": from_text,
+        "to_text": to_text,
+        "from_resolved": from_group.name if from_group else (from_rail_direct.name if from_rail_direct else None),
+        "from_resolved_as_rail_station": from_group is None and from_rail_direct is not None,
+        "from_error": from_err,
+        "to_resolved": to_group.name if to_group else (to_rail_direct.name if to_rail_direct else None),
+        "to_resolved_as_rail_station": to_group is None and to_rail_direct is not None,
+        "to_error": to_err,
+    }
+    if from_err or to_err:
+        return out
+
+    from_rail = _linked_rail_groups(from_group) if from_group else []
+    if from_rail_direct and from_rail_direct.name not in {g.name for g in from_rail}:
+        from_rail = [*from_rail, from_rail_direct]
+    to_rail = _linked_rail_groups(to_group) if to_group else []
+    if to_rail_direct and to_rail_direct.name not in {g.name for g in to_rail}:
+        to_rail = [*to_rail, to_rail_direct]
+
+    candidates = []
+    if from_group:
+        from_ids = set(from_group.stop_ids)
+        to_ids = set(to_group.stop_ids) if to_group else set()
+        for path_key, path in _route_paths.items():
+            from_positions = [i for i, sid in enumerate(path) if sid in from_ids]
+            if not from_positions:
+                continue
+            to_positions = [i for i, sid in enumerate(path) if sid in to_ids]
+            route_id, direction_id = path_key.rsplit("_", 1)
+            reaches = any(t > f for f in from_positions for t in to_positions)
+            candidates.append({
+                "route": _routes.get(route_id, {}).get("short_name", route_id),
+                "route_id": route_id,
+                "direction_id": int(direction_id),
+                "path_length": len(path),
+                "from_positions": from_positions,
+                "to_positions": to_positions,
+                "reaches_to_stop": reaches,
+                "rejected_reason": None if reaches else ("to_stop_not_on_this_route" if not to_positions else "to_stop_only_before_from_stop"),
+            })
+
+    out["candidate_bus_routes"] = candidates
+    out["from_linked_rail_stations"] = [g.name for g in from_rail]
+    out["to_linked_rail_stations"] = [g.name for g in to_rail]
+    out["direct_route_options"] = [
+        {"route": _routes.get(r, {}).get("short_name", r), "direction_id": d, "board_stop_id": s}
+        for r, d, s in (_direct_route_options(from_group, to_group) if from_group and to_group else [])
+    ]
+    rail_inclusive = _rail_inclusive_options(from_group, to_group, from_rail, to_rail)
+    out["rail_inclusive_options_count"] = len(rail_inclusive)
+    out["rail_inclusive_options"] = [
+        [{"mode": t[0], **({"route": _routes.get(t[1], {}).get("short_name", t[1])} if t[0] == "bus" else {"line": t[1]})} for t in option]
+        for option in rail_inclusive
+    ]
+    out["plan_trip_result"] = plan_trip(from_text, to_text)
+    return out
 
 
 def _step_phrase(step: dict) -> str:
@@ -1351,30 +1458,45 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
     either. A rail leg reports line/direction/stop-count only: there's no
     realtime feed for rail in this app, so no rail ETA is ever invented."""
     _load_static()
-    from_group, error = _resolve_group(from_stop_text)
+    from_group, from_rail_direct, error = _resolve_trip_endpoint(from_stop_text)
     if error:
         return error
-    to_group, error = _resolve_group(to_stop_text)
+    to_group, to_rail_direct, error = _resolve_trip_endpoint(to_stop_text)
     if error:
         return error
-    if from_group.name == to_group.name:
-        return {"ok": False, "reason": "same_stop", "message": f"You're already at {from_group.name}."}
+    from_name = from_group.name if from_group else from_rail_direct.name
+    to_name = to_group.name if to_group else to_rail_direct.name
+    if from_name == to_name:
+        return {"ok": False, "reason": "same_stop", "message": f"You're already at {from_name}."}
+
+    from_rail = _linked_rail_groups(from_group) if from_group else []
+    if from_rail_direct and from_rail_direct.name not in {g.name for g in from_rail}:
+        from_rail = [*from_rail, from_rail_direct]
+    to_rail = _linked_rail_groups(to_group) if to_group else []
+    if to_rail_direct and to_rail_direct.name not in {g.name for g in to_rail}:
+        to_rail = [*to_rail, to_rail_direct]
 
     step_candidates: list[list[tuple]] = [
-        [("bus", route_id, direction_id, board_stop_id, from_group.name, to_group.name)]
-        for route_id, direction_id, board_stop_id in _direct_route_options(from_group, to_group)
+        [("bus", route_id, direction_id, board_stop_id, from_name, to_name)]
+        for route_id, direction_id, board_stop_id in (
+            _direct_route_options(from_group, to_group) if from_group and to_group else []
+        )
     ]
     if len(step_candidates) < 2:
-        step_candidates += _rail_inclusive_options(from_group, to_group)
+        step_candidates += _rail_inclusive_options(from_group, to_group, from_rail, to_rail)
 
     if not step_candidates:
+        nearby_rail = [g.name for g in from_rail]
+        hint = (
+            f"There's a rail station near {from_name} — {nearby_rail[0]} — worth checking from there."
+            if nearby_rail
+            else "Try checking arrivals at a bigger hub nearby instead."
+        )
         return {
             "ok": False,
             "reason": "no_direct_route",
-            "message": (
-                f"I don't see a direct bus or train from {from_group.name} to {to_group.name}. "
-                "Try checking arrivals at a bigger hub nearby instead."
-            ),
+            "nearby_rail_stations": nearby_rail,
+            "message": f"I don't see a direct bus or train from {from_name} to {to_name}. {hint}",
         }
 
     categories_needed = {
@@ -1400,8 +1522,8 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
                     break
                 resolved_steps.append(bus_step)
             else:
-                _, line_id, r_dir, board_idx, alight_idx, from_name, to_name = step
-                resolved_steps.append(_rail_step(line_id, r_dir, board_idx, alight_idx, from_name, to_name))
+                _, line_id, r_dir, board_idx, alight_idx, leg_from_name, leg_to_name = step
+                resolved_steps.append(_rail_step(line_id, r_dir, board_idx, alight_idx, leg_from_name, leg_to_name))
         if resolved_steps:
             resolved.append(resolved_steps)
         if len(resolved) >= 2:
@@ -1413,7 +1535,7 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
         return {
             "ok": False,
             "reason": "no_buses_nearby",
-            "message": f"There's a route, but no buses are close enough to {from_group.name} right now for an ETA.",
+            "message": f"There's a route, but no buses are close enough to {from_name} right now for an ETA.",
         }
 
     phrases = [", then ".join(_step_phrase(s) for s in steps) for steps in resolved]
@@ -1425,8 +1547,8 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
 
     return {
         "ok": True,
-        "from_stop": from_group.name,
-        "to_stop": to_group.name,
+        "from_stop": from_name,
+        "to_stop": to_name,
         "options": [{"steps": steps} for steps in resolved],
         "message": message,
     }

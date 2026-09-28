@@ -72,5 +72,40 @@ class RailInclusiveTests(unittest.TestCase):
         self.assertEqual(result["reason"], "no_direct_route")
 
 
+class RailStationNameFallbackTests(unittest.TestCase):
+    """Regression for a real bug from a live call: "Pasar Seni" (the bare
+    interchange name a caller actually says) has no single matching bus
+    platform — it's ambiguous among 9+ "Pasar Seni Platform X" stops — so
+    plan_trip used to error out with ambiguous_stop before ever checking
+    that "Pasar Seni" names an unambiguous RAIL station (_resolve_rail_group)
+    that the bus->rail fallback tier can anchor on directly."""
+
+    def test_fakulti_sains_komputer_to_bare_pasar_seni_finds_a_route(self):
+        result = gtfs.plan_trip("Fakulti Sains Komputer", "Pasar Seni")
+        self.assertNotEqual(result.get("reason"), "ambiguous_stop", result)
+        self.assertNotEqual(result.get("reason"), "no_direct_route", result)
+
+    def test_perpustakaan_um_to_kl_sentral_finds_a_structural_route(self):
+        # T789 (a route Perpustakaan Um also sits on) reaches a stop linked
+        # to the Kelana Jaya Line, which serves KL Sentral directly. Only
+        # asserts a route was found, not a live ETA — same reasoning as
+        # RailInclusiveTests above.
+        result = gtfs.plan_trip("Perpustakaan UM", "KL Sentral")
+        self.assertNotIn(result.get("reason"), ("no_direct_route", "ambiguous_stop"), result)
+
+    def test_kolej_kediaman_kesepuluh_to_kl_sentral_is_genuinely_unreachable(self):
+        # Not a bug: T815's only rail-linked stop is Phileo Damansara, which
+        # is solely on the Kajang Line — and KL Sentral is only linked to
+        # the Kelana Jaya Line and the Monorail, neither of which is the
+        # Kajang Line. Reaching KL Sentral from here needs a rail-to-rail
+        # transfer, outside this app's one-transfer design (see plan_trip's
+        # docstring). This documents that the rejection is correct, not a
+        # routing bug — the agent's job here is next_arrivals + nearest rail
+        # station, not a route that doesn't exist within one transfer.
+        result = gtfs.plan_trip("Kolej Kediaman Kesepuluh", "KL Sentral")
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["reason"], "no_direct_route")
+
+
 if __name__ == "__main__":
     unittest.main()
