@@ -153,6 +153,12 @@ _word_to_groups: dict[str, set[str]] = {}  # normalised word -> {group keys}
 _word_soundex: dict[str, str] = {}  # normalised word -> soundex code
 _soundex_to_words: dict[str, set[str]] = {}  # soundex code -> {words}
 
+# Same word-index shape as above, built over rail station names instead of
+# bus stop names — lets find_stop/next_arrivals/plan_trip run the identical
+# tiered/sound-alike matching over stations (see _tiered_match).
+_rail_word_to_groups: dict[str, set[str]] = {}
+_rail_soundex_to_words: dict[str, set[str]] = {}
+
 # Rail (LRT/MRT/Monorail/BRT): static only, kept in its own namespace so it
 # never touches the bus vehicle-tracking path — there's no realtime feed for
 # it here, so plan_trip only ever reports a rail leg's line/stops, never an
@@ -170,11 +176,29 @@ _rail_group_by_display_name: dict[str, RailStationGroup] = {}  # RailStationGrou
 _loaded = False
 
 
-def _normalize(text: str) -> str:
+def _raw_normalize(text: str) -> str:
     text = _CODE_PREFIX_RE.sub("", text.strip())
-    text = _PUNCT_RE.sub(" ", text.lower())
-    words = [ABBREVIATIONS.get(w, w) for w in text.split()]
+    return _PUNCT_RE.sub(" ", text.lower())
+
+
+def _normalize(text: str) -> str:
+    words = [ABBREVIATIONS.get(w, w) for w in _raw_normalize(text).split()]
     return " ".join(words)
+
+
+def _canonical(text: str) -> str:
+    """Query-side normalization: resolves data/aliases.json against the
+    caller's RAW words first ("petaling street", "the gardens" as authored)
+    — checking only the abbreviation-translated form ("petaling jalan",
+    "the taman") silently broke any alias whose key contains a word
+    ABBREVIATIONS also translates — then falls back to the translated form,
+    for an alias written in already-canonical spelling, then that
+    translated form itself when there's no alias at all."""
+    raw = _raw_normalize(text)
+    if raw in ALIASES:
+        return ALIASES[raw]
+    translated = _normalize(text)
+    return ALIASES.get(translated, translated)
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -462,6 +486,12 @@ def _build_word_index() -> None:
         _word_soundex[word] = code
         _soundex_to_words.setdefault(code, set()).add(word)
 
+    for group_key in _rail_groups_by_name:
+        for word in group_key.split():
+            _rail_word_to_groups.setdefault(word, set()).add(group_key)
+    for word in _rail_word_to_groups:
+        _rail_soundex_to_words.setdefault(_soundex(word), set()).add(word)
+
 
 def _load_aliases() -> None:
     if ALIASES_FILE.exists():
@@ -527,8 +557,15 @@ def _speak_list(items: list[str]) -> str:
 _STOPWORDS = {"of", "the", "a", "an", "at", "in", "near", "is", "to"}
 
 
-def _word_candidates(normalized_query: str) -> list[StopGroup]:
-    """Order-independent word match.
+def _word_candidates(
+    normalized_query: str,
+    word_to_groups: dict[str, set[str]] = None,
+    soundex_to_words: dict[str, set[str]] = None,
+    groups_by_name: dict[str, object] = None,
+) -> list:
+    """Order-independent word match. Shared by the bus-stop and rail-station
+    indexes (see _tiered_match) — defaults to the bus dicts so every
+    existing call site keeps working unchanged.
 
     A word actually present in some group name is trusted outright. A word
     that ISN'T is only ever expanded via Soundex/close-spelling when it's
@@ -537,11 +574,15 @@ def _word_candidates(normalized_query: str) -> list[StopGroup]:
     must never mix noise groups in next to a real match, so multi-word
     queries use only the words that hit exactly, never the fuzzy fallback.
     """
+    word_to_groups = _word_to_groups if word_to_groups is None else word_to_groups
+    soundex_to_words = _soundex_to_words if soundex_to_words is None else soundex_to_words
+    groups_by_name = _groups_by_name if groups_by_name is None else groups_by_name
+
     words = [w for w in normalized_query.split() if w not in _STOPWORDS]
     if not words:
         return []
 
-    exact_sets = [_word_to_groups.get(w, set()) for w in words]
+    exact_sets = [word_to_groups.get(w, set()) for w in words]
     recognized = sum(1 for s in exact_sets if s)
 
     if recognized > 0:
@@ -554,7 +595,7 @@ def _word_candidates(normalized_query: str) -> list[StopGroup]:
         non_empty = [s for s in exact_sets if s]
         all_match = set.intersection(*non_empty)
         keys = all_match or set.union(*non_empty)
-        return [_groups_by_name[k] for k in keys]
+        return [groups_by_name[k] for k in keys]
 
     # Nothing matched a real word at all. Only worth a Soundex/spelling
     # guess when the query is a single word — there's no real match here
@@ -562,40 +603,64 @@ def _word_candidates(normalized_query: str) -> list[StopGroup]:
     if len(words) != 1 or len(words[0]) < 4:
         return []
     word = words[0]
-    candidates = set(_soundex_to_words.get(_soundex(word), set()))
-    candidates |= set(difflib.get_close_matches(word, _word_to_groups.keys(), n=3, cutoff=0.84))
+    candidates = set(soundex_to_words.get(_soundex(word), set()))
+    candidates |= set(difflib.get_close_matches(word, word_to_groups.keys(), n=3, cutoff=0.84))
     groups: set[str] = set()
     for cand in candidates:
-        groups |= _word_to_groups.get(cand, set())
-    return [_groups_by_name[k] for k in groups]
+        groups |= word_to_groups.get(cand, set())
+    return [groups_by_name[k] for k in groups]
 
 
-def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
-    """Returns (matches, confident). confident=False means these are a
-    best-effort guess (the caller heard something, we're not sure what)."""
-    normalized = _normalize(query)
-    normalized = ALIASES.get(normalized, normalized)
+_TIER_RANK = {"exact": 4, "contains": 3, "word": 2, "close": 1}
 
-    exact = _groups_by_name.get(normalized)
+
+def _tiered_match(
+    normalized: str,
+    groups_by_name: dict[str, object],
+    word_to_groups: dict[str, set[str]],
+    soundex_to_words: dict[str, set[str]],
+) -> tuple[list, str | None]:
+    """One namespace's (bus stops, or rail stations) best match for an
+    already-normalized query, ranked exact > contains > word > close (see
+    _TIER_RANK) so find_stop/next_arrivals/plan_trip can compare a bus match
+    against a rail match and take whichever is genuinely stronger — not just
+    whichever namespace happened to try first. Returns ([], None) rather than
+    a low-confidence guess; guessing is a separate, cross-namespace step (see
+    find_stop and _resolve_bus_or_rail) so a weak bus guess can never shadow
+    a weak rail guess or vice versa."""
+    exact = groups_by_name.get(normalized)
     if exact:
-        return [exact], True
+        return [exact], "exact"
 
-    contains = [g for name, g in _groups_by_name.items() if normalized in name or name in normalized]
+    contains = [g for name, g in groups_by_name.items() if normalized in name or name in normalized]
     if contains:
         contains.sort(key=lambda g: len(g.name))
-        return contains[:5], True
+        return contains[:5], "contains"
 
-    word_matches = _word_candidates(normalized)
+    word_matches = _word_candidates(normalized, word_to_groups, soundex_to_words, groups_by_name)
     if word_matches:
         word_matches.sort(key=lambda g: len(g.name))
-        return word_matches[:5], True
+        return word_matches[:5], "word"
 
     # Confident tier, so the bar is high — 0.72 let scrambled multi-word
     # noise ("fidudaman sara") slip through at ~0.74 and get reported as a
     # sure match instead of a guess. Real typos score .95+, well clear of 0.8.
-    close = difflib.get_close_matches(normalized, _groups_by_name.keys(), n=5, cutoff=0.8)
+    close = difflib.get_close_matches(normalized, groups_by_name.keys(), n=5, cutoff=0.8)
     if close:
-        return [_groups_by_name[n] for n in close], True
+        return [groups_by_name[n] for n in close], "close"
+
+    return [], None
+
+
+def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
+    """Bus-stop-only tiered match, kept for the call sites that only ever
+    want a boardable physical stop (set_arrival_alert, debug_stop). Returns
+    (matches, confident); confident=False means a best-effort guess."""
+    normalized = _canonical(query)
+
+    matches, tier = _tiered_match(normalized, _groups_by_name, _word_to_groups, _soundex_to_words)
+    if tier:
+        return matches, True
 
     # Last resort: a best-effort top-3 guess, marked low-confidence so
     # callers phrase this as "did you mean" not "found" — but only above
@@ -606,9 +671,47 @@ def _search_groups(query: str) -> tuple[list[StopGroup], bool]:
     return [_groups_by_name[n] for n in guess], False
 
 
+def _best_match(query: str) -> tuple[list, bool, bool]:
+    """The one comparison used by find_stop and _resolve_bus_or_rail: the
+    best bus-stop tier against the best rail-station tier for the same
+    query, picking whichever is strictly stronger (ties favour the bus
+    stop, this app's long-standing default for a name like "KL Sentral"
+    that's both a bus hub and a station). Returns (matches, confident,
+    is_station); confident=False means matches is a merged best-effort
+    guess across BOTH namespaces, ranked together — so a mishearing like
+    "Miojim Nagara" can surface the rail station "Muzium Negara" instead of
+    losing to an unrelated bus-stop guess that happened to be tried first."""
+    normalized = _canonical(query)
+
+    bus_matches, bus_tier = _tiered_match(normalized, _groups_by_name, _word_to_groups, _soundex_to_words)
+    rail_matches, rail_tier = _tiered_match(normalized, _rail_groups_by_name, _rail_word_to_groups, _rail_soundex_to_words)
+    bus_rank = _TIER_RANK.get(bus_tier, 0)
+    rail_rank = _TIER_RANK.get(rail_tier, 0)
+
+    if rail_rank > bus_rank:
+        return rail_matches, True, True
+    if bus_rank > 0:
+        return bus_matches, True, False
+    if rail_rank > 0:
+        return rail_matches, True, True
+
+    combined = {**{k: (False, g) for k, g in _groups_by_name.items()}, **{k: (True, g) for k, g in _rail_groups_by_name.items()}}
+    guess_keys = difflib.get_close_matches(normalized, combined.keys(), n=3, cutoff=MIN_GUESS_SCORE)
+    if not guess_keys:
+        return [], False, False
+    is_station, _ = combined[guess_keys[0]]  # only meaningful when len==1; mixed guesses label per-item below
+    guesses = [combined[k] for k in guess_keys]
+    return guesses, False, is_station
+
+
+def _label(name: str, is_station: bool) -> str:
+    return f"{name} station" if is_station else name
+
+
 def find_stop(query: str) -> dict:
     _load_static()
-    matches, confident = _search_groups(query)
+    matches, confident, is_station = _best_match(query)
+
     if not confident:
         if not matches:
             return {
@@ -616,7 +719,9 @@ def find_stop(query: str) -> dict:
                 "reason": "not_found",
                 "message": "I couldn't find a stop by that name. Want me to check what's nearby instead?",
             }
-        names = [m.name for m in matches]
+        # matches here is a list of (is_station, group) pairs from the
+        # merged cross-namespace guess — label each one individually.
+        names = [_label(g.name, st) for st, g in matches]
         return {
             "ok": False,
             "reason": "not_found",
@@ -625,12 +730,14 @@ def find_stop(query: str) -> dict:
         }
     if len(matches) == 1:
         group = matches[0]
-        return {"ok": True, "stop": group.name, "message": f"Found {group.name}."}
-    names = [m.name for m in matches]
+        label = _label(group.name, is_station)
+        return {"ok": True, "stop": group.name, "is_station": is_station, "message": f"Found {label}."}
+    names = [_label(m.name, is_station) for m in matches]
     return {
         "ok": True,
         "ambiguous": True,
         "candidates": names,
+        "is_station": is_station,
         "message": "I found a few stops with that name: " + ", ".join(names) + ". Which one did you mean?",
     }
 
@@ -663,30 +770,43 @@ def _resolve_group(stop_text: str) -> tuple[StopGroup | None, dict | None]:
     return matches[0], None
 
 
-def _resolve_rail_group(stop_text: str) -> RailStationGroup | None:
-    """Exact-name-only rail fallback for plan_trip: a caller naming an
-    interchange by its rail name ("Pasar Seni") often has no single matching
-    bus platform — ambiguous among many platform-specific stops — so this
-    lets plan_trip treat the station itself as the endpoint instead of
-    erroring out on the bus-side ambiguity."""
-    normalized = _normalize(stop_text)
-    normalized = ALIASES.get(normalized, normalized)
-    return _rail_groups_by_name.get(normalized)
+def _resolve_bus_or_rail(stop_text: str) -> tuple[StopGroup | None, RailStationGroup | None, dict | None]:
+    """The shared resolver for next_arrivals and plan_trip (_resolve_trip_
+    endpoint below): compares the best bus-stop tier against the best
+    rail-station tier (_best_match) and returns whichever is genuinely
+    stronger, not just whichever a caller-naming-an-interchange-by-its-rail-
+    name ("Pasar Seni", ambiguous among 9+ bus platforms but an exact rail
+    match) or a mishearing of a station name ("Muzium Negara") happens to
+    hit first on the bus side. Only errors (not_found/ambiguous_stop) when
+    neither namespace resolves to exactly one match."""
+    matches, confident, is_station = _best_match(stop_text)
+    if not confident:
+        if not matches:
+            return None, None, {
+                "ok": False,
+                "reason": "not_found",
+                "message": "I couldn't find a stop by that name. Want me to check what's nearby instead?",
+            }
+        names = [_label(g.name, st) for st, g in matches]
+        return None, None, {
+            "ok": False,
+            "reason": "not_found",
+            "candidates": names,
+            "message": f"I didn't catch a stop by that name. Did you mean {_speak_list(names)}?",
+        }
+    if len(matches) > 1:
+        names = [_label(m.name, is_station) for m in matches]
+        return None, None, {
+            "ok": False,
+            "reason": "ambiguous_stop",
+            "candidates": names,
+            "message": "There's more than one stop with that name: " + ", ".join(names) + ". Which one?",
+        }
+    return (None, matches[0], None) if is_station else (matches[0], None, None)
 
 
-def _resolve_trip_endpoint(stop_text: str) -> tuple[StopGroup | None, RailStationGroup | None, dict | None]:
-    """plan_trip's endpoint resolver: a clean bus-stop match wins as before;
-    failing that, an exact rail-station-name match (e.g. "Pasar Seni", which
-    has no single matching bus platform — see _resolve_rail_group) lets the
-    trip still be planned with that end anchored on the station itself.
-    Only errors (not_found/ambiguous_stop) when neither resolves."""
-    group, error = _resolve_group(stop_text)
-    if group:
-        return group, None, None
-    rail_group = _resolve_rail_group(stop_text)
-    if rail_group:
-        return None, rail_group, None
-    return None, None, error
+# plan_trip and debug_trip both resolve endpoints via _resolve_bus_or_rail.
+_resolve_trip_endpoint = _resolve_bus_or_rail
 
 
 # Spoken letters/digits STT sometimes spells out instead of transcribing as
@@ -1143,11 +1263,36 @@ def _service_window() -> tuple[bool, str]:
     return False, next_start
 
 
+def _station_as_stop_group(station: RailStationGroup) -> dict | StopGroup:
+    """A caller asking for arrivals "at" a station means the buses at its
+    nearest linked bus stops (there's no bus fleet running on the rail
+    network itself) — so next_arrivals treats the station as a synthetic
+    StopGroup covering every bus stop group _rail_to_bus links to it. Returns
+    an error payload instead if the station has no linked bus stop at all."""
+    linked_ids = [
+        sid
+        for name in _rail_to_bus.get(station.name, [])
+        for sid in _bus_group_by_display_name.get(name, StopGroup(name="", stop_ids=[])).stop_ids
+    ]
+    if not linked_ids:
+        return {
+            "ok": False,
+            "reason": "route_not_at_stop",
+            "message": f"{station.name} doesn't have a nearby bus stop I can check arrivals for.",
+        }
+    return StopGroup(name=station.name, stop_ids=linked_ids)
+
+
 def next_arrivals(stop_text: str, route_text: str | None = None) -> dict:
     _load_static()
-    group, error = _resolve_group(stop_text)
+    group, station, error = _resolve_bus_or_rail(stop_text)
     if error:
         return error
+    if station:
+        group_or_error = _station_as_stop_group(station)
+        if isinstance(group_or_error, dict):
+            return group_or_error
+        group = group_or_error
 
     route_id = None
     if route_text:
@@ -1258,6 +1403,33 @@ def _rail_direct_options(from_group: RailStationGroup, to_group: RailStationGrou
 def _linked_rail_groups(bus_group: StopGroup) -> list[RailStationGroup]:
     names = _bus_to_rail.get(bus_group.name, [])
     return [_rail_group_by_display_name[n] for n in names if n in _rail_group_by_display_name]
+
+
+def _bus_reachable_rail_stations(from_group: StopGroup) -> list[RailStationGroup]:
+    """Rail stations reachable from from_group by a single direct bus ride —
+    broader than _linked_rail_groups (walking distance only). Used as the
+    no_direct_route fallback's "nearest useful rail station" suggestion: a
+    stop whose only route is a campus shuttle (e.g. Kolej Kediaman Kesepuluh
+    on T815) has no WALKING-distance station, but T815 itself terminates at
+    Phileo Damansara MRT — worth naming even though that station's own line
+    doesn't happen to reach the caller's destination within one transfer."""
+    found: list[RailStationGroup] = []
+    seen: set[str] = set()
+    for rail_name, bus_names in _rail_to_bus.items():
+        if rail_name in seen:
+            continue
+        station_group = _rail_group_by_display_name.get(rail_name)
+        if station_group is None:
+            continue
+        for bus_name in bus_names:
+            transfer_group = _bus_group_by_display_name.get(bus_name)
+            if transfer_group is None or transfer_group.name == from_group.name:
+                continue
+            if _direct_route_options(from_group, transfer_group):
+                found.append(station_group)
+                seen.add(rail_name)
+                break
+    return found
 
 
 _RAIL_PREFIX_RE = re.compile(r"^(LRT|MRT|BRT)\s+")
@@ -1429,6 +1601,7 @@ def debug_trip(from_text: str, to_text: str) -> dict:
     out["candidate_bus_routes"] = candidates
     out["from_linked_rail_stations"] = [g.name for g in from_rail]
     out["to_linked_rail_stations"] = [g.name for g in to_rail]
+    out["from_bus_reachable_rail_stations"] = [g.name for g in (_bus_reachable_rail_stations(from_group) if from_group else [])]
     out["direct_route_options"] = [
         {"route": _routes.get(r, {}).get("short_name", r), "direction_id": d, "board_stop_id": s}
         for r, d, s in (_direct_route_options(from_group, to_group) if from_group and to_group else [])
@@ -1486,7 +1659,8 @@ def plan_trip(from_stop_text: str, to_stop_text: str) -> dict:
         step_candidates += _rail_inclusive_options(from_group, to_group, from_rail, to_rail)
 
     if not step_candidates:
-        nearby_rail = [g.name for g in from_rail]
+        nearby_rail_groups = from_rail or (_bus_reachable_rail_stations(from_group) if from_group else [])
+        nearby_rail = [g.name for g in nearby_rail_groups]
         hint = (
             f"There's a rail station near {from_name} — {nearby_rail[0]} — worth checking from there."
             if nearby_rail

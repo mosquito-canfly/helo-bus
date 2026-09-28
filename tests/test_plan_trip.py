@@ -105,6 +105,13 @@ class RailStationNameFallbackTests(unittest.TestCase):
         result = gtfs.plan_trip("Kolej Kediaman Kesepuluh", "KL Sentral")
         self.assertFalse(result["ok"], result)
         self.assertEqual(result["reason"], "no_direct_route")
+        # Real-call regression: T815 does reach a rail station (Phileo
+        # Damansara, its own loop terminus) even though that station's line
+        # doesn't help reach KL Sentral specifically — nearby_rail_stations
+        # used to only ever report a WALKING-distance station (none here),
+        # leaving the caller with nothing but "try a bigger hub". It should
+        # now name Phileo Damansara as worth checking from there.
+        self.assertIn("Phileo Damansara", result["nearby_rail_stations"])
 
 
 if __name__ == "__main__":

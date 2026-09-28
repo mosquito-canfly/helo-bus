@@ -1,14 +1,14 @@
 {
-  "first_try_accuracy": 72.5,
-  "top3_accuracy": 77.5,
+  "first_try_accuracy": 80.4,
+  "top3_accuracy": 84.8,
   "correct_no_match_rate": 90.0,
-  "latency_p50_ms": 0.6,
-  "latency_p95_ms": 257.3,
-  "total_queries": 50,
+  "latency_p50_ms": 0.8,
+  "latency_p95_ms": 192.7,
+  "total_queries": 56,
   "plan_trip_pairs": 10,
   "plan_trip_accuracy": 100.0,
-  "plan_trip_latency_p50_ms": 155.6,
-  "plan_trip_latency_p95_ms": 652.7,
+  "plan_trip_latency_p50_ms": 143.3,
+  "plan_trip_latency_p95_ms": 601.2,
   "find_stop_misses": [
     {
       "query": "Damansara",
@@ -53,8 +53,8 @@
         "Damansara"
       ],
       "got": [
-        "Uoa Damansara",
         "Neo Damansara",
+        "Uoa Damansara",
         "Cita Damansara",
         "Damansara Intan",
         "Prima Damansara"
@@ -92,10 +92,10 @@
       ],
       "got": [
         "G Village",
-        "KG Baru BT 11",
         "KG Baru Hicom",
+        "KG Baru BT 11",
         "KG SG Tua Baru",
-        "Sentul Village"
+        "KG Baru Ampang"
       ]
     },
     {
@@ -110,39 +110,6 @@
         "Istana Alam Shah",
         "Pusat Kusta Negara",
         "Bank Negara Malaysia"
-      ]
-    },
-    {
-      "query": "Petaling Street",
-      "category": "landmark_alias",
-      "expected": [
-        "Pasar Seni (Platform B5)",
-        "(M) Pasar Seni (Platform A6)",
-        "Pasar Seni (Platform A1 - A2)",
-        "Pasar Seni (Platform A6 - A8)",
-        "Pasar Seni (Platform E1 - E3)"
-      ],
-      "got": [
-        "JLN 4/2",
-        "JLN 4/9C",
-        "Jalan 4/3",
-        "Jalan 4/5D",
-        "SPG JLN 4/7"
-      ]
-    },
-    {
-      "query": "The Gardens",
-      "category": "landmark_alias",
-      "expected": [
-        "Mid Valley (Selatan)",
-        "(M1) Mid Valley South Court"
-      ],
-      "got": [
-        "Taman Ria",
-        "TMN Putra",
-        "Taman Tar",
-        "Taman Ltat",
-        "Taman Kaya"
       ]
     },
     {

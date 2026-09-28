@@ -905,6 +905,13 @@
         width: 100%;
         height: 100%;
       }
+      /* Standard OSM tiles come in full colour — greyscale is applied here,
+         scoped to the raster tile pane only, so markers (.leaflet-marker-
+         pane), route polylines and a rail leg's own line colour
+         (.leaflet-overlay-pane) stay unfiltered on top, per DESIGN.md. */
+      .leaflet-tile-pane {
+        filter: grayscale(1) contrast(1.1) brightness(1.05);
+      }
       /* Leaflet's own default marker icons are shipped as separate image
          files this app doesn't vendor — divIcon markers below are styled
          here instead of pulling in leaflet's images/ assets.
@@ -1651,6 +1658,6 @@
     <!-- Bump this query on every app.js edit — without it, browsers cache
          the old script indefinitely and a shipped fix can silently not run
          for returning visitors (this is why "How it works" looked broken). -->
-    <script src="/app.js?v=9"></script>
+    <script src="/app.js?v=10"></script>
   </body>
 </html>

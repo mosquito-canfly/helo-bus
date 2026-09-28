@@ -183,31 +183,10 @@ function addLine(who, text) {
     }
   }
 
-  // Tie this reply to the tool calls that produced it. Repeats of the same
-  // tool in one batch (e.g. a chatty get_now) collapse into one "tool ×N"
-  // chip rather than a wall of identical buttons.
-  if (who === "agent" && pending.length) {
-    const used = document.createElement("div");
-    used.className = "used";
-    const grouped = new Map(); // tool name -> { seqs, failed (of the latest call) }
-    for (const event of pending) {
-      const group = grouped.get(event.tool) || { seqs: [] };
-      group.seqs.push(event.seq);
-      group.failed = event.failed;
-      grouped.set(event.tool, group);
-    }
-    for (const [tool, group] of grouped) {
-      const count = group.seqs.length;
-      const lastSeq = group.seqs[count - 1];
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "chip" + (group.failed ? " warn" : "");
-      chip.textContent = count > 1 ? `${tool} ×${count}` : tool;
-      chip.title = count > 1 ? `Show the latest of ${count} calls` : "Show this call";
-      chip.addEventListener("click", () => revealCall(lastSeq));
-      used.append(chip);
-    }
-    row.append(used);
+  // Tool-call details (which tools ran, args, raw reasons) live only in the
+  // Developer view now — the conversation itself shows just the reply plus
+  // the arrival/trip card above, never a "tool ×N" chip trail.
+  if (who === "agent") {
     pending = [];
   }
 
@@ -479,14 +458,6 @@ function renderCall(event) {
 
   els.calls.append(card);
   els.calls.scrollTop = els.calls.scrollHeight;
-}
-
-function revealCall(seq) {
-  const card = els.calls.querySelector(`[data-seq="${seq}"]`);
-  if (!card) return;
-  card.scrollIntoView({ behavior: "smooth", block: "center" });
-  card.classList.add("flash");
-  setTimeout(() => card.classList.remove("flash"), 1400);
 }
 
 async function pollEvents() {
@@ -803,15 +774,17 @@ setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on 
 
 // --------------------------------------------------------------- live map
 //
-// Leaflet, read-only — panning/zooming only, no editing. Tiles match
-// ../where-bus's own choice (checked its LiveMap.tsx): CARTO Positron, a
-// greyscale basemap, so the map itself carries no colour and a rail line's
-// official colour reads as the one accent on the page, not one of several.
-// Geometry comes from /api/map-state (app/mapstate.py): stop-to-stop
-// polylines built from coordinates already loaded for the ETA engine, never
-// the full GTFS shape files — no memory cost beyond what next_arrivals
-// already needed. Polled on MAP_POLL_MS; map-state itself is cheap (no
-// network call to data.gov.my, just a read of whatever's cached).
+// Leaflet, read-only — panning/zooming only, no editing. Tiles are the
+// standard OpenStreetMap raster server — CARTO's own tiles started
+// returning "API key required" on the deployed site once its free tier
+// changed, so this switched back to the tile source that never needed one.
+// Greyscale is a CSS filter on .leaflet-tile-pane only (see index.html), so
+// markers, route polylines and a rail line's own colour stay on top,
+// unfiltered. Geometry comes from /api/map-state (app/mapstate.py):
+// stop-to-stop polylines built from coordinates already loaded for the ETA
+// engine, never the full GTFS shape files — no memory cost beyond what
+// next_arrivals already needed. Polled on MAP_POLL_MS; map-state itself is
+// cheap (no network call to data.gov.my, just a read of whatever's cached).
 
 let map = null;
 let mapLayers = [];
@@ -821,10 +794,8 @@ let activeOptionIndex = 0;
 function initMap() {
   if (typeof L === "undefined" || map) return; // CDN blocked/slow — page still works without it
   map = L.map("map", { attributionControl: true }).setView([3.139, 101.6869], 12); // Kuala Lumpur
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
-      '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
   }).addTo(map);
 }
