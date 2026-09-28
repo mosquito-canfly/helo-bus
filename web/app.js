@@ -1,6 +1,7 @@
 const SAMPLE_RATE = 24000;
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const POLL_MS = 400;
+const MAP_POLL_MS = 3000; // vehicle positions only change ~every 45s server-side; no need for transcript-speed polling
 
 const els = {
   talk: document.getElementById("talk"),
@@ -34,6 +35,7 @@ let scheduled = [];
 let eventCursor = 0;
 let pollTimer = null;
 let pending = [];
+let lastLiveEvent = null; // { kind: "arrival" | "trip", result } — drives the right panel + map
 
 // ---------------------------------------------------------------- helpers
 
@@ -118,16 +120,28 @@ function addLine(who, text) {
 
   // The visual payoff: a next_arrivals or plan_trip result behind this reply
   // gets a big card right in the conversation, not just a line in the feed.
+  // Also remembered for the right panel's compact "current trip" summary
+  // (see renderTripPanel) — the map's own geometry comes from the server
+  // instead (/api/map-state), but this richer result is what the panel's
+  // text needs (eta_human, fare, etc. that map-state doesn't carry).
   if (who === "agent") {
     const arrivalEvent = pending.find(
       (event) => event.tool === "next_arrivals" && event.result && Array.isArray(event.result.arrivals) && event.result.arrivals.length
     );
-    if (arrivalEvent) row.append(renderArrivalCard(arrivalEvent.result));
+    if (arrivalEvent) {
+      row.append(renderArrivalCard(arrivalEvent.result));
+      lastLiveEvent = { kind: "arrival", result: arrivalEvent.result };
+      renderTripPanel();
+    }
 
     const tripEvent = pending.find(
       (event) => event.tool === "plan_trip" && event.result && Array.isArray(event.result.options) && event.result.options.length
     );
-    if (tripEvent) row.append(renderTripCard(tripEvent.result));
+    if (tripEvent) {
+      row.append(renderTripCard(tripEvent.result));
+      lastLiveEvent = { kind: "trip", result: tripEvent.result };
+      renderTripPanel();
+    }
   }
 
   // Tie this reply to the tool calls that produced it. Repeats of the same
@@ -177,6 +191,21 @@ const BUS_ICON_SVG =
   '<path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>' +
   '<path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/>' +
   '<circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></svg>';
+
+const TRAIN_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="5" y="3" width="14" height="13" rx="4"/><path d="M5 11h14"/>' +
+  '<path d="M9 19l-2 3"/><path d="M15 19l2 3"/><circle cx="8.5" cy="14" r="0.6" fill="currentColor" stroke="none"/>' +
+  '<circle cx="15.5" cy="14" r="0.6" fill="currentColor" stroke="none"/></svg>';
+
+// Reused for both "transfer between legs" (conversation trip card) and the
+// tool-feed's not_found/ambiguous chip elsewhere — a generic "switch" glyph.
+const TRANSFER_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/>' +
+  '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>';
+
+const TRIP_ICONS = { bus: BUS_ICON_SVG, train: TRAIN_ICON_SVG, transfer: TRANSFER_ICON_SVG };
 
 // ETA rows styled like where-bus's own stop-selected view: icon chip, route
 // badge coloured by category (RapidKL maroon / MRT Feeder slate), bold ETA.
@@ -265,33 +294,71 @@ function renderTripSteps(steps) {
   return wrap;
 }
 
-// Only ever shows a number that came from the tool result's own fare_total
-// — never computed or guessed here.
-function fareLine(fareTotal) {
-  if (!fareTotal || fareTotal.amount == null) return null;
-  const text = fareTotal.all_known ? `RM ${fareTotal.amount.toFixed(2)} total` : `RM ${fareTotal.amount.toFixed(2)} known so far`;
-  return el("span", "trip-fare", text);
+// Expands each leg into its numbered lines: a leg's own step, plus — unless
+// it's the last leg — a separate "Get off at X" step before the next leg,
+// so a 2-leg trip reads as 3 numbered instructions, matching how a rider
+// actually experiences it (ride, alight, ride again).
+function tripNumberedRows(steps) {
+  const rows = [];
+  steps.forEach((step, i) => {
+    const isLast = i === steps.length - 1;
+    if (step.mode === "bus") {
+      const dest = isLast ? ` to ${step.alight_at}` : "";
+      rows.push({ icon: "bus", text: `Bus ${step.route} from ${step.board_at}${dest} — next in ${step.eta_human}` });
+      if (!isLast) rows.push({ icon: "transfer", text: `Get off at ${step.alight_at}` });
+    } else {
+      const plural = step.stops !== 1 ? "s" : "";
+      rows.push({ icon: "train", text: `${step.line} toward ${step.direction} — ${step.stops} stop${plural} to ${step.to_station}` });
+      if (!isLast) rows.push({ icon: "transfer", text: `Get off at ${step.to_station}` });
+    }
+  });
+  return rows;
 }
 
-function renderTripCard(result) {
-  const card = el("div", "arrival-card");
+function tripTotalStops(steps) {
+  return steps.reduce((sum, s) => sum + (s.mode === "rail" ? s.stops : 0), 0);
+}
 
-  const top = el("div", "arrival-top");
-  top.append(el("span", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
-  const fare = fareLine(result.options[0].fare_total);
-  if (fare) top.append(fare);
-  card.append(top);
+// Only ever shows a number that came from the tool result's own fare_total
+// — never computed or guessed here.
+function fareFootText(fareTotal) {
+  if (!fareTotal || fareTotal.amount == null) return "Fare unknown";
+  return fareTotal.all_known
+    ? `RM ${fareTotal.amount.toFixed(2)} total`
+    : `RM ${fareTotal.amount.toFixed(2)} confirmed — fare partly unknown`;
+}
 
-  card.append(renderTripSteps(result.options[0].steps));
+function renderOneTripCard(option, label) {
+  const card = el("div", "trip-card");
+  if (label) card.append(el("p", "trip-card-label", label));
 
-  if (result.options.length > 1) {
-    const alt = el("div", "trip-alt");
-    alt.append(el("span", "block-note", "Or:"));
-    alt.append(renderTripSteps(result.options[1].steps));
-    card.append(alt);
-  }
+  const list = el("ol", "trip-num-steps");
+  tripNumberedRows(option.steps).forEach((row, i) => {
+    const li = el("li", "trip-num-step");
+    li.append(el("span", "trip-num", String(i + 1)));
+    const icon = el("span", "trip-icon");
+    icon.innerHTML = TRIP_ICONS[row.icon];
+    li.append(icon, el("span", "trip-num-text", row.text));
+    list.append(li);
+  });
+  card.append(list);
+
+  const foot = el("div", "trip-card-foot");
+  const stops = tripTotalStops(option.steps);
+  foot.append(el("span", null, stops ? `${stops} stop${stops !== 1 ? "s" : ""}` : "Direct"));
+  foot.append(el("span", null, fareFootText(option.fare_total)));
+  card.append(foot);
 
   return card;
+}
+
+// One card per option — alternatives are separate, clearly labelled "Option
+// N" cards, not folded into the first card with an inline "Or:".
+function renderTripCard(result) {
+  const wrap = document.createDocumentFragment();
+  wrap.append(el("p", "arrival-stop", `${result.from_stop} → ${result.to_stop}`));
+  result.options.forEach((option, i) => wrap.append(renderOneTripCard(option, i === 0 ? null : `Option ${i + 1}`)));
+  return wrap;
 }
 
 // A rider doesn't care that this came from "next_arrivals" — they care what
@@ -456,22 +523,41 @@ function stopPlayback() {
 
 // ------------------------------------------------------------- location
 
-function shareLocation() {
-  // Best-effort and silent: find_nearby_stops just won't work without it,
-  // which the agent already handles as a normal ok:false reason.
-  if (!navigator.geolocation) return;
+// Silent by default (called on every call start, whether or not the caller
+// ever asks for a nearby stop) — find_nearby_stops just won't work without
+// it, which the agent already handles as a normal ok:false reason. The
+// explicit "Share location" button passes onDone to show a confirmation.
+function shareLocation(onDone) {
+  if (!navigator.geolocation) return onDone && onDone(false);
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       fetch("/api/location", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      }).catch(() => {});
+      })
+        .then(() => onDone && onDone(true))
+        .catch(() => onDone && onDone(false));
     },
-    () => {},
+    () => onDone && onDone(false),
     { timeout: 8000 }
   );
 }
+
+const shareLocationBtn = document.getElementById("share-location");
+shareLocationBtn.addEventListener("click", () => {
+  shareLocationBtn.disabled = true;
+  shareLocationBtn.textContent = "Locating…";
+  shareLocation((ok) => {
+    shareLocationBtn.disabled = false;
+    shareLocationBtn.classList.toggle("confirmed", ok);
+    shareLocationBtn.textContent = ok ? "Location shared" : "Couldn't get location";
+    setTimeout(() => {
+      shareLocationBtn.classList.remove("confirmed");
+      shareLocationBtn.textContent = "Share location";
+    }, 2500);
+  });
+});
 
 // --------------------------------------------------------------- session
 
@@ -663,6 +749,94 @@ function setToolsOpen(open) {
 toolsToggle.addEventListener("click", () => setToolsOpen(!document.body.classList.contains("tools-open")));
 toolsBackdrop.addEventListener("click", () => setToolsOpen(false)); // tap-outside-to-close, mobile sheet only
 setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on mobile
+
+// --------------------------------------------------------------- live map
+//
+// Leaflet + OpenStreetMap tiles, read-only — panning/zooming only, no
+// editing. Geometry comes from /api/map-state (app/mapstate.py): stop-to-
+// stop polylines built from coordinates already loaded for the ETA engine,
+// never the full GTFS shape files, so this adds no real memory over what
+// next_arrivals already needed. Polled on the same ~400ms cadence as
+// /api/events while a call is live; map-state itself is cheap (no network
+// call to data.gov.my, just a read of whatever's cached).
+
+let map = null;
+let mapLayers = [];
+
+function initMap() {
+  if (typeof L === "undefined" || map) return; // CDN blocked/slow — page still works without it
+  map = L.map("map", { attributionControl: true }).setView([3.139, 101.6869], 12); // Kuala Lumpur
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+}
+
+function mapDot(cls) {
+  return L.divIcon({ className: "", html: `<span class="map-dot ${cls}"></span>`, iconSize: [14, 14] });
+}
+
+const LEG_COLOR = { bus: "#111827", rail: "#2563eb" };
+
+function renderMap(state) {
+  if (!map) return;
+  for (const layer of mapLayers) map.removeLayer(layer);
+  mapLayers = [];
+
+  const bounds = [];
+  const addBounds = (lat, lon) => bounds.push([lat, lon]);
+
+  if (state.location) {
+    mapLayers.push(L.marker([state.location.lat, state.location.lon], { icon: mapDot("you") }).addTo(map));
+    addBounds(state.location.lat, state.location.lon);
+  }
+  for (const stop of state.stops || []) {
+    mapLayers.push(L.marker([stop.lat, stop.lon], { icon: mapDot("stop") }).bindTooltip(stop.name).addTo(map));
+    addBounds(stop.lat, stop.lon);
+  }
+  for (const leg of state.legs || []) {
+    if (!leg.points || !leg.points.length) continue;
+    const color = leg.mode === "rail" ? LEG_COLOR.rail : LEG_COLOR.bus;
+    mapLayers.push(L.polyline(leg.points, { color, weight: 4, opacity: 0.85 }).addTo(map));
+    leg.points.forEach(([lat, lon]) => addBounds(lat, lon));
+  }
+  for (const v of state.vehicles || []) {
+    mapLayers.push(L.marker([v.lat, v.lon], { icon: mapDot("vehicle") }).bindTooltip(`Route ${v.route}`).addTo(map));
+  }
+
+  if (bounds.length) map.fitBounds(bounds, { padding: [28, 28], maxZoom: 16, animate: false });
+}
+
+async function pollMapState() {
+  try {
+    const state = await fetch("/api/map-state").then((r) => r.json());
+    renderMap(state);
+  } catch (_) {
+    /* transient; the next tick retries */
+  }
+}
+
+initMap();
+pollMapState();
+setInterval(pollMapState, MAP_POLL_MS);
+
+// The right panel's compact "current trip" summary — reuses the same
+// step-row markup as the old inline card, driven by the richer result
+// addLine() already tracked in lastLiveEvent (map-state's own payload is
+// geometry-only, no eta_human/fare/etc.).
+function renderTripPanel() {
+  const panel = document.getElementById("trip-panel");
+  panel.textContent = "";
+  if (!lastLiveEvent) {
+    panel.append(el("p", "empty-note", "Ask about a stop or trip to see it here."));
+    return;
+  }
+  if (lastLiveEvent.kind === "trip") {
+    panel.append(renderTripSteps(lastLiveEvent.result.options[0].steps));
+  } else {
+    panel.append(renderEtaList(lastLiveEvent.result.arrivals));
+  }
+}
 
 // ----------------------------------------------------------- demo data
 

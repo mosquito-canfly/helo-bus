@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.responses import FileResponse, Response
 
-from . import gtfs, insights, store
+from . import gtfs, insights, mapstate, store
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -47,6 +47,7 @@ async def record_tool_calls(request, call_next):
     payload = b"".join([chunk async for chunk in response.body_iterator])
     store.log_event(request.url.path, body, payload)
     insights.log_event(request.url.path, body, payload)  # best-effort; never raises
+    mapstate.update(request.url.path, payload)  # best-effort; never raises
     return Response(
         content=payload,
         status_code=response.status_code,
@@ -183,6 +184,18 @@ def api_token() -> dict:
     if resp.status_code >= 400:
         raise HTTPException(resp.status_code, f"Token request failed: {resp.text}")
     return {"token": resp.json()["token"]}
+
+
+@app.get("/api/map-state")
+def api_map_state() -> dict:
+    """Geometry for the live map: the latest next_arrivals/plan_trip answer
+    (mapstate.py, updated from the tool-call middleware above) plus the
+    caller's last-shared location, if any. No GTFS shapes held in memory —
+    legs are stop-to-stop polylines built from coordinates already loaded
+    for the ETA engine; see app/mapstate.py."""
+    state = mapstate.get()
+    state["location"] = {"lat": gtfs._last_location[0], "lon": gtfs._last_location[1]} if gtfs._last_location else None
+    return state
 
 
 @app.get("/api/insights")
