@@ -3,6 +3,45 @@ const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const POLL_MS = 400;
 const MAP_POLL_MS = 3000; // vehicle positions only change ~every 45s server-side; no need for transcript-speed polling
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {}); // best-effort; app works fine without it
+}
+
+// -------------------------------------------------------------- install
+
+const installBtn = document.getElementById("install-btn");
+let deferredInstallPrompt = null;
+
+// Android/Chrome offers an install prompt we can trigger ourselves; only
+// show the button once the browser has actually offered one.
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.hidden = false;
+});
+
+installBtn.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  installBtn.hidden = true;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+});
+
+window.addEventListener("appinstalled", () => {
+  installBtn.hidden = true;
+});
+
+// iOS Safari has no beforeinstallprompt at all — the only way to install is
+// Share -> Add to Home Screen, so just say that, once, and only if this
+// isn't already running installed (navigator.standalone is iOS's own flag
+// for that, distinct from the standard display-mode media query below).
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (isIOS && !isStandalone) {
+  document.getElementById("ios-install-hint").hidden = false;
+}
+
 const els = {
   talk: document.getElementById("talk"),
   status: document.getElementById("status"),
@@ -562,6 +601,13 @@ shareLocationBtn.addEventListener("click", () => {
 // --------------------------------------------------------------- session
 
 async function start() {
+  // Only one Start/End call button on screen, ever: the hero's big centred
+  // one is for the empty state only, the bar's is for every state after —
+  // flip the instant a call is requested (not on the first transcript
+  // line), so there's no window where both are visible together.
+  document.body.classList.add("call-started");
+  clearEmpty(els.transcript);
+
   shareLocation(); // ask now, while the call-start click still counts as a user gesture
   resetTimer(); // clear the previous call's duration
   setStatus("Connecting", "busy");

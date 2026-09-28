@@ -1,4 +1,4 @@
-"""Bus arrival API for the Helo Bus voice agent.
+"""Bus arrival API for the Helo BusKL voice agent.
 
 AssemblyAI's Voice Agent API calls these endpoints directly as HTTP tools.
 Every response is shaped for a language model to read aloud: short, literal,
@@ -25,9 +25,9 @@ from . import gtfs, insights, mapstate, store
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-log = logging.getLogger("helo_bus.main")
+log = logging.getLogger("helo_buskl.main")
 
-app = FastAPI(title="Helo Bus", version="1.0.0")
+app = FastAPI(title="Helo BusKL", version="1.0.0")
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 

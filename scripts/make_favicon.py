@@ -59,6 +59,20 @@ def draw_bus(size: int) -> list[list[bool]]:
     return grid
 
 
+def draw_bus_padded(size: int, content_frac: float = 0.6) -> list[list[bool]]:
+    """Same glyph, inset so the whole design sits within a maskable icon's
+    safe zone — the OS can crop this to a circle/squircle and still show
+    the full bus, not clip its edges."""
+    inner = int(size * content_frac)
+    inner_grid = draw_bus(inner)
+    offset = (size - inner) // 2
+    grid = [[False] * size for _ in range(size)]
+    for y in range(inner):
+        for x in range(inner):
+            grid[offset + y][offset + x] = inner_grid[y][x]
+    return grid
+
+
 def _png_chunk(tag: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
 
@@ -113,9 +127,14 @@ def main() -> None:
     touch_png = encode_png(draw_bus(180))
     (WEB_DIR / "apple-touch-icon.png").write_bytes(touch_png)
 
+    (WEB_DIR / "icon-192.png").write_bytes(encode_png(draw_bus(192)))
+    (WEB_DIR / "icon-512.png").write_bytes(encode_png(draw_bus(512)))
+    (WEB_DIR / "icon-512-maskable.png").write_bytes(encode_png(draw_bus_padded(512)))
+
     print(f"wrote {WEB_DIR / 'favicon.svg'} ({len(svg)} bytes)")
     print(f"wrote {WEB_DIR / 'favicon.ico'} ({(WEB_DIR / 'favicon.ico').stat().st_size} bytes)")
     print(f"wrote {WEB_DIR / 'apple-touch-icon.png'} ({len(touch_png)} bytes)")
+    print("wrote icon-192.png, icon-512.png, icon-512-maskable.png")
 
 
 if __name__ == "__main__":

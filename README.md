@@ -1,4 +1,4 @@
-# Helo Bus
+# Helo BusKL
 
 A voice assistant that tells RapidKL bus riders in Kuala Lumpur when their
 bus is arriving, built on AssemblyAI's Voice Agent API using **server-side

@@ -1,6 +1,6 @@
 ---
 version: alpha
-name: Helo-Bus-where-bus-derived-design
+name: Helo-BusKL-where-bus-derived-design
 description: A design system re-implementing the visual language of ../where-bus (Next.js + Tailwind v4 + Geist), a live RapidKL/MRT-Feeder tracker — floating pill controls over a full-bleed surface, category colour-coding (RapidKL maroon vs MRT Feeder slate), soft rounded-2xl card stacks for live data, and a bottom-sheet-on-mobile / left-sidebar-on-desktop panel that is the system's one structural signature.
 
 colors:

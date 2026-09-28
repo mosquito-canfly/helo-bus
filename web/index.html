@@ -6,7 +6,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Helo Bus — RapidKL Voice Assistant</title>
+    <title>Helo BusKL — RapidKL Voice Assistant</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Helo BusKL" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -132,7 +137,10 @@
         align-items: center;
         justify-content: space-between;
         gap: var(--space-lg);
-        padding: var(--space-md) var(--space-2xl);
+        /* Standalone PWA on a notched phone: the status bar area needs real
+           padding here too, not just the bottom bar's home-indicator gap. */
+        padding: max(var(--space-md), env(safe-area-inset-top)) max(var(--space-2xl), env(safe-area-inset-right))
+          var(--space-md) max(var(--space-2xl), env(safe-area-inset-left));
         border-bottom: 1px solid var(--color-border-subtle);
         background: var(--color-bg);
       }
@@ -961,19 +969,40 @@
         border-color: var(--color-ink);
       }
 
+      .ios-install-hint {
+        margin: 0;
+        padding: var(--space-sm) var(--space-2xl);
+        font-size: var(--type-caption-size);
+        color: var(--color-text-secondary);
+        background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border-subtle);
+        text-align: center;
+      }
+      .ios-install-hint[hidden] {
+        display: none;
+      }
+
       /* ------------------------------------------------------- control bar */
 
       .bar {
         flex: none;
-        height: var(--bar-h);
+        min-height: var(--bar-h);
         display: flex;
         align-items: center;
         justify-content: center;
         gap: var(--space-lg);
-        padding: 0 var(--space-2xl);
-        padding-bottom: env(safe-area-inset-bottom);
+        padding: 0 max(var(--space-2xl), env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--space-2xl), env(safe-area-inset-left));
         border-top: 1px solid var(--color-border-subtle);
         background: var(--color-bg);
+      }
+
+      /* The generic .ghost sizing (header pills) is too small a touch
+         target for a primary bottom-bar action sharing space with Start
+         call — give it real height instead. */
+      #share-location {
+        min-height: 44px;
+        padding: var(--space-sm) var(--space-lg);
+        font-size: var(--type-body-md-regular-size);
       }
 
       .bar-left {
@@ -998,6 +1027,16 @@
       /* Held after the call ends, so the length of the last one stays readable. */
       #timer[data-state="ended"] {
         color: var(--color-text-secondary);
+      }
+
+      /* Only one call button on screen at a time: the bar's is hidden until
+         a call has actually been requested (see body.call-started, set in
+         start()) — until then the hero's own big centred button is the only
+         one, and it disappears on its own once the call starts (its parent
+         .empty is removed). Never shown again after, including once a call
+         ends: the conversation already has content by then. */
+      body:not(.call-started) .bar #talk {
+        display: none;
       }
 
       /* Primary CTA — solid black, the one strong fill in the whole system
@@ -1460,17 +1499,20 @@
           </svg>
         </div>
         <div class="brand-text">
-          <h1>Helo Bus</h1>
+          <h1>Helo BusKL</h1>
           <p>RapidKL arrivals · AssemblyAI Voice Agent API</p>
         </div>
       </div>
       <div class="top-actions">
+        <button id="install-btn" class="ghost" type="button" hidden>Install app</button>
         <button id="tools-toggle" class="ghost" type="button" aria-expanded="false">Live bus info</button>
         <button id="info-btn" class="ghost" type="button">Demo data</button>
         <a class="ghost" href="/insights">Insights</a>
         <span id="status" data-state="idle">Idle</span>
       </div>
     </header>
+
+    <p class="ios-install-hint" id="ios-install-hint" hidden>Tap Share → Add to Home Screen to install Helo BusKL.</p>
 
     <div class="alert-banner" id="alert-banner" hidden>
       <span class="alert-dot"></span>
@@ -1557,6 +1599,6 @@
     <!-- Bump this query on every app.js edit — without it, browsers cache
          the old script indefinitely and a shipped fix can silently not run
          for returning visitors (this is why "How it works" looked broken). -->
-    <script src="/app.js?v=7"></script>
+    <script src="/app.js?v=8"></script>
   </body>
 </html>

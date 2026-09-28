@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .gtfs import KL_TZ, STALE_CAVEAT
 
-log = logging.getLogger("helo_bus.insights")
+log = logging.getLogger("helo_buskl.insights")
 
 DB_FILE = Path(__file__).resolve().parent.parent / "data" / "insights.db"
 

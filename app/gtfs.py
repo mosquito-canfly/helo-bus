@@ -37,7 +37,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from google.transit import gtfs_realtime_pb2
 
-log = logging.getLogger("helo_bus.gtfs")
+log = logging.getLogger("helo_buskl.gtfs")
 
 from . import store
 

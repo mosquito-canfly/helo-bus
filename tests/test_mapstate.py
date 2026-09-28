@@ -25,8 +25,32 @@ gtfs._load_static()
 
 class MapStateTests(unittest.TestCase):
     def test_bus_plus_rail_trip_has_real_polylines(self):
-        result = gtfs.plan_trip("Fakulti Sains Komputer", "Pasar Seni (Platform B5)")
-        self.assertTrue(result["ok"], result)
+        # A synthetic result shaped exactly like a real plan_trip answer for
+        # this stop pair (structurally verified elsewhere this session) —
+        # built directly rather than calling gtfs.plan_trip(), which needs a
+        # live bus ETA to return ok=True and would make this test flaky
+        # depending on which buses happen to be tracked right now (same
+        # reason next_arrivals/plan_trip themselves have no live test).
+        result = {
+            "ok": True,
+            "from_stop": "Fakulti Sains Komputer",
+            "to_stop": "Pasar Seni (Platform B5)",
+            "options": [{
+                "steps": [
+                    {
+                        "mode": "bus", "route": "T815", "category": "rapid-bus-mrtfeeder",
+                        "board_at": "Fakulti Sains Komputer", "alight_at": "MRT Phileo Damansara Pintu A",
+                        "eta_seconds": 480, "eta_human": "8 minutes", "fare": 1.0,
+                    },
+                    {
+                        "mode": "rail", "line": "Kajang Line", "direction": "Kajang",
+                        "from_station": "Phileo Damansara", "to_station": "Pasar Seni",
+                        "stops": 4, "fare": None,
+                    },
+                ],
+                "fare_total": {"amount": 1.0, "all_known": False},
+            }],
+        }
         mapstate.set_from_plan_trip(result)
         state = mapstate.get()
 
