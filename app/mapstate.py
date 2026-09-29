@@ -212,6 +212,35 @@ def set_from_next_arrivals(result: dict) -> None:
     _state_call_id = store.active_call_id()
 
 
+def set_from_find_stop(result: dict) -> None:
+    """A single resolved match only — an ambiguous result has candidates,
+    not a stop to place a pin at, and isn't "something to show" either."""
+    global _state, _state_call_id
+    if not (result.get("ok") and result.get("stop")):
+        return
+    point = _any_point(result["stop"])
+    if not point:
+        return
+    option = {"stops": [{"name": result["stop"], "role": "stop", **point}], "legs": [], "vehicles": []}
+    _state = {"kind": "stop", "options": [option]}
+    _state_call_id = store.active_call_id()
+
+
+def set_from_find_nearby_stops(result: dict) -> None:
+    global _state, _state_call_id
+    if not (result.get("ok") and result.get("nearby")):
+        return
+    stops = []
+    for entry in result["nearby"]:
+        point = _any_point(entry["stop"])
+        if point:
+            stops.append({"name": entry["stop"], "role": "stop", **point})
+    if not stops:
+        return
+    _state = {"kind": "stop", "options": [{"stops": stops, "legs": [], "vehicles": []}]}
+    _state_call_id = store.active_call_id()
+
+
 def set_from_plan_trip(result: dict, args: dict | None = None) -> None:
     global _state, _state_call_id
     options: list[dict] = []
@@ -239,12 +268,16 @@ def set_from_plan_trip(result: dict, args: dict | None = None) -> None:
 def update(path: str, request_body: bytes, response_body: bytes) -> None:
     """Best-effort: a map-state hiccup must never break the tool call."""
     tool = path.rsplit("/", 1)[-1]
-    if tool not in ("next_arrivals", "plan_trip"):
+    if tool not in ("next_arrivals", "plan_trip", "find_stop", "find_nearby_stops"):
         return
     try:
         result = json.loads(response_body or b"{}")
         if tool == "next_arrivals":
             set_from_next_arrivals(result)
+        elif tool == "find_stop":
+            set_from_find_stop(result)
+        elif tool == "find_nearby_stops":
+            set_from_find_nearby_stops(result)
         else:
             args = json.loads(request_body or b"{}")
             set_from_plan_trip(result, args)

@@ -251,20 +251,23 @@
 
       /* ------------------------------------------------------------- panes */
 
-      /* Conversation is the hero: full-width until a call starts. The tool
-         feed (map + Developer view) stays collapsed to a 0-width grid
-         track until then — see body.call-started/body.tools-open below —
-         so the Start-call button never jumps, it just has more room
-         appear smoothly beside it. */
+      /* Conversation is the hero: a single full-width column with no
+         reserved space for the tool panel at all — .pane.tools starts
+         display:none, genuinely out of layout, not a 0-width track (a
+         grid/flex track, even at 0px, is still a second column to some
+         browsers' rendering and was the "empty grey map" bug). Flexbox,
+         not grid, specifically so the reveal (see .tools-visible below,
+         toggled from app.js's revealPanel()) can animate a plain `width`
+         — grid-template-columns can't smoothly interpolate between a
+         1-track and a 2-track list, it just snaps. */
       main {
         flex: 1;
         min-height: 0;
-        display: grid;
-        grid-template-columns: 1fr 0px;
-        transition: grid-template-columns 0.32s ease;
+        display: flex;
       }
-      body.tools-open main {
-        grid-template-columns: 1fr 360px;
+      .hero-pane {
+        flex: 1;
+        min-width: 0;
       }
 
       .pane {
@@ -281,16 +284,31 @@
       body.tools-open .pane + .pane {
         border-left-color: var(--color-border-subtle);
       }
+      /* display:none until revealPanel() adds tools-visible (first call
+         result with something to show) — then width itself animates
+         0 -> 360px as body.tools-open is added a frame later. Collapsing
+         again (a new call starting) removes tools-visible outright,
+         instantly — nothing asked for a smooth close, only a smooth
+         reveal. */
       .pane.tools {
-        display: flex;
+        display: none;
+        flex: none;
         overflow: hidden;
       }
+      .pane.tools.tools-visible {
+        display: flex;
+        width: 0;
+        transition: width 0.32s ease;
+      }
+      body.tools-open .pane.tools.tools-visible {
+        width: 360px;
+      }
 
-      /* Nothing to toggle before a call exists. */
+      /* Nothing to toggle before the panel has ever had something to show. */
       #tools-toggle {
         display: none;
       }
-      body.call-started #tools-toggle {
+      body.panel-revealed #tools-toggle {
         display: inline-block;
       }
 
@@ -1511,20 +1529,22 @@
         /* Just the map, pinned — the trip-panel summary and Developer view
            are desktop-sidebar extras (the conversation's own arrival/trip
            cards already carry that content on a phone-width screen).
-           Collapsed to 0 height until a call starts (body.tools-open,
-           set from start() alongside the desktop panel), same reasoning
-           as main's grid-track transition above: smooth, no jump. */
+           display:none (not a 0-height reservation) until revealPanel()
+           adds tools-visible, same reasoning as the desktop rule above. */
         .pane.tools {
-          display: flex;
+          display: none;
           order: 1;
           flex: none;
+          border-left: none;
+        }
+        .pane.tools.tools-visible {
+          display: flex;
           height: 0;
           overflow: hidden;
-          border-left: none;
           border-bottom: 1px solid transparent;
           transition: height 0.32s ease, border-color 0.32s ease;
         }
-        body.tools-open .pane.tools {
+        body.tools-open .pane.tools.tools-visible {
           height: 38vh;
           border-bottom-color: var(--color-border-subtle);
         }

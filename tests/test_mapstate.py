@@ -117,6 +117,31 @@ class MapStateTests(unittest.TestCase):
         self.assertTrue(state["options"], state)
         self.assertTrue(any(leg["points"] for leg in state["options"][0]["legs"]))
 
+    def test_find_stop_places_the_resolved_stop(self):
+        mapstate.set_from_find_stop({"ok": True, "stop": "KL Sentral", "is_station": False, "message": "Found KL Sentral."})
+        state = mapstate.get(store.active_call_id())
+        self.assertEqual(state["kind"], "stop")
+        self.assertEqual(state["options"][0]["stops"][0]["name"], "KL Sentral")
+
+    def test_find_stop_ambiguous_result_has_nothing_to_place(self):
+        # No single "stop" key — a list of candidates isn't a map point, so
+        # this must leave whatever state already existed untouched (same
+        # reasoning as test_failed_result_does_not_touch_existing_state).
+        mapstate.set_from_find_stop({"ok": True, "stop": "KL Sentral", "is_station": False, "message": "Found KL Sentral."})
+        before = mapstate.get(store.active_call_id())
+        mapstate.set_from_find_stop({"ok": True, "ambiguous": True, "candidates": ["A", "B"], "message": "Which one?"})
+        self.assertEqual(mapstate.get(store.active_call_id()), before)
+
+    def test_find_nearby_stops_places_every_stop_found(self):
+        result = {"ok": True, "nearby": [
+            {"stop": "KL Sentral", "distance_meters": 50, "walk_minutes": 1},
+            {"stop": "Pasar Seni (Platform B5)", "distance_meters": 300, "walk_minutes": 4},
+        ], "message": "Nearest stops: KL Sentral, Pasar Seni."}
+        mapstate.set_from_find_nearby_stops(result)
+        state = mapstate.get(store.active_call_id())
+        self.assertEqual(state["kind"], "stop")
+        self.assertEqual({s["name"] for s in state["options"][0]["stops"]}, {"KL Sentral", "Pasar Seni (Platform B5)"})
+
 
 if __name__ == "__main__":
     unittest.main()

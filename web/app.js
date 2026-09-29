@@ -488,6 +488,27 @@ function renderCall(event) {
   els.calls.scrollTop = els.calls.scrollHeight;
 }
 
+// "Something to show" for the map: a resolved stop/station, a nearby-stops
+// list, live arrivals, or a planned trip — not get_now, and not a failed or
+// ambiguous lookup with no point to place. Matches what mapstate.py's
+// set_from_* functions each actually require to produce a pin.
+function eventHasMapContent(event) {
+  const r = event.result;
+  if (!r || !r.ok) return false;
+  switch (event.tool) {
+    case "find_stop":
+      return Boolean(r.stop);
+    case "find_nearby_stops":
+      return Array.isArray(r.nearby) && r.nearby.length > 0;
+    case "next_arrivals":
+      return Array.isArray(r.arrivals) && r.arrivals.length > 0;
+    case "plan_trip":
+      return Array.isArray(r.options) && r.options.length > 0;
+    default:
+      return false;
+  }
+}
+
 async function pollEvents() {
   try {
     const res = await fetch(`/api/events?since=${eventCursor}&call_id=${encodeURIComponent(currentCallId || "")}`);
@@ -497,6 +518,7 @@ async function pollEvents() {
       renderCall(event);
       pending.push(event);
       if (event.alert) showAlert(event.result.message);
+      if (event.alert || eventHasMapContent(event)) revealPanel();
     }
   } catch (_) {
     /* transient; the next tick retries */
@@ -629,9 +651,14 @@ async function start() {
   if (map) for (const layer of mapLayers) map.removeLayer(layer);
   mapLayers = [];
 
-  setToolsOpen(true);
-  if (!mapPollTimer) mapPollTimer = setInterval(pollMapState, MAP_POLL_MS);
-  pollMapState();
+  // Single-column until THIS call's own first result reveals the panel
+  // (see revealPanel, called from pollEvents) — a previous call's open
+  // panel must not carry over.
+  panelRevealed = false;
+  document.body.classList.remove("panel-revealed", "tools-open");
+  document.getElementById("tools-pane").classList.remove("tools-visible");
+  clearInterval(mapPollTimer);
+  mapPollTimer = null;
   renderTripPanel();
 
   shareLocation(); // ask now, while the call-start click still counts as a user gesture
@@ -815,15 +842,50 @@ for (const button of document.querySelectorAll(".example")) {
 
 const toolsToggle = document.getElementById("tools-toggle");
 const toolsBackdrop = document.getElementById("tools-backdrop");
+const toolsPane = document.getElementById("tools-pane");
+
+// Set once revealPanel() first shows something this call, cleared again by
+// start() for the next one. Gates #tools-toggle's own visibility (see CSS)
+// separately from tools-open, which is just "currently expanded vs
+// collapsed" and can be flipped back and forth by the user after reveal.
+let panelRevealed = false;
 
 function setToolsOpen(open) {
   document.body.classList.toggle("tools-open", open);
   toolsToggle.setAttribute("aria-expanded", String(open));
 }
 
+// The one place the panel goes from genuinely absent (display:none) to
+// visible — see the .tools-visible/.tools-open CSS. Two steps, one frame
+// apart, so the width transition actually plays: adding display:flex and
+// starting the transition in the same tick never animates.
+function revealPanel() {
+  if (panelRevealed) return;
+  panelRevealed = true;
+  document.body.classList.add("panel-revealed");
+  toolsPane.classList.add("tools-visible");
+  void toolsPane.offsetWidth; // force layout before tools-open's width/height jumps
+  setToolsOpen(true);
+  requestAnimationFrame(() => {
+    if (map) map.invalidateSize(); // sized against a display:none container until now
+    if (!mapPollTimer) mapPollTimer = setInterval(pollMapState, MAP_POLL_MS);
+    pollMapState();
+  });
+  // The pane's width (desktop) or height (mobile) is still animating at
+  // that first invalidateSize() — Leaflet only loads tiles for whatever
+  // size it saw then, leaving the rest of the newly-grown box blank grey
+  // once the transition finishes. One more call after it settles fixes
+  // that. A plain timeout (not transitionend) so this still fires under
+  // prefers-reduced-motion, where the transition is instant/skipped.
+  setTimeout(() => {
+    if (map) map.invalidateSize();
+  }, 380);
+}
+
 toolsToggle.addEventListener("click", () => setToolsOpen(!document.body.classList.contains("tools-open")));
 toolsBackdrop.addEventListener("click", () => setToolsOpen(false)); // tap-outside-to-close, mobile sheet only
-// Stays closed until start() opens it — nothing to show before a call exists.
+// Stays closed (and .pane.tools stays display:none) until revealPanel()
+// opens it on this call's first result — see pollEvents below.
 
 // --------------------------------------------------------------- live map
 //
