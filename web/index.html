@@ -251,17 +251,20 @@
 
       /* ------------------------------------------------------------- panes */
 
-      /* Conversation is the hero: full-width by default. The tool feed is a
-         secondary "How it works" panel, opened on request (default open on
-         desktop, closed on mobile — see the tools-toggle script). */
+      /* Conversation is the hero: full-width until a call starts. The tool
+         feed (map + Developer view) stays collapsed to a 0-width grid
+         track until then — see body.call-started/body.tools-open below —
+         so the Start-call button never jumps, it just has more room
+         appear smoothly beside it. */
       main {
         flex: 1;
         min-height: 0;
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 0px;
+        transition: grid-template-columns 0.32s ease;
       }
       body.tools-open main {
-        grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+        grid-template-columns: 1fr 360px;
       }
 
       .pane {
@@ -272,13 +275,23 @@
         background: var(--color-bg);
       }
       .pane + .pane {
-        border-left: 1px solid var(--color-border-subtle);
+        border-left: 1px solid transparent;
+        transition: border-color 0.32s ease;
+      }
+      body.tools-open .pane + .pane {
+        border-left-color: var(--color-border-subtle);
       }
       .pane.tools {
+        display: flex;
+        overflow: hidden;
+      }
+
+      /* Nothing to toggle before a call exists. */
+      #tools-toggle {
         display: none;
       }
-      body.tools-open .pane.tools {
-        display: flex;
+      body.call-started #tools-toggle {
+        display: inline-block;
       }
 
       .tools-backdrop {
@@ -1497,14 +1510,23 @@
         }
         /* Just the map, pinned — the trip-panel summary and Developer view
            are desktop-sidebar extras (the conversation's own arrival/trip
-           cards already carry that content on a phone-width screen). */
+           cards already carry that content on a phone-width screen).
+           Collapsed to 0 height until a call starts (body.tools-open,
+           set from start() alongside the desktop panel), same reasoning
+           as main's grid-track transition above: smooth, no jump. */
         .pane.tools {
           display: flex;
           order: 1;
           flex: none;
-          height: 38vh;
+          height: 0;
+          overflow: hidden;
           border-left: none;
-          border-bottom: 1px solid var(--color-border-subtle);
+          border-bottom: 1px solid transparent;
+          transition: height 0.32s ease, border-color 0.32s ease;
+        }
+        body.tools-open .pane.tools {
+          height: 38vh;
+          border-bottom-color: var(--color-border-subtle);
         }
         .pane.tools .pane-head,
         .pane.tools .trip-panel,

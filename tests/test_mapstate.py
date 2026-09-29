@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import gtfs, mapstate  # noqa: E402
+from app import gtfs, mapstate, store  # noqa: E402
 
 gtfs._load_static()
 
@@ -51,7 +51,7 @@ class MapStateTests(unittest.TestCase):
             }],
         }
         mapstate.set_from_plan_trip(result)
-        state = mapstate.get()
+        state = mapstate.get(store.active_call_id())
 
         self.assertEqual(state["kind"], "trip")
         option = state["options"][0]
@@ -66,19 +66,38 @@ class MapStateTests(unittest.TestCase):
                 self.assertTrue(100.0 < lon < 102.5, lon)
 
     def test_next_arrivals_places_the_stop(self):
-        result = gtfs.next_arrivals("KL Sentral")
+        # Synthetic result, not a live gtfs.next_arrivals() call — this
+        # tests set_from_next_arrivals's own placement logic, not whether a
+        # bus happens to be tracked near KL Sentral right now (that used to
+        # make this test flaky outside service hours or on a live-feed gap).
+        result = {"ok": True, "stop": "KL Sentral", "arrivals": [{"route": "T789", "eta_seconds": 180, "eta_human": "3 minutes", "category": "rapid-bus-kl"}]}
         mapstate.set_from_next_arrivals(result)
-        state = mapstate.get()
+        state = mapstate.get(store.active_call_id())
 
         self.assertEqual(state["kind"], "stop")
         self.assertEqual(len(state["options"]), 1)
         self.assertEqual(state["options"][0]["stops"][0]["name"], "KL Sentral")
 
     def test_failed_result_does_not_touch_existing_state(self):
-        mapstate.set_from_next_arrivals(gtfs.next_arrivals("KL Sentral"))
-        before = mapstate.get()
+        mapstate.set_from_next_arrivals({"ok": True, "stop": "KL Sentral", "arrivals": [{"route": "T789", "eta_seconds": 180, "eta_human": "3 minutes", "category": "rapid-bus-kl"}]})
+        before = mapstate.get(store.active_call_id())
         mapstate.set_from_plan_trip({"ok": False, "reason": "no_direct_route"})
-        self.assertEqual(mapstate.get(), before)
+        self.assertEqual(mapstate.get(store.active_call_id()), before)
+
+    def test_a_different_or_stale_call_id_never_sees_this_state(self):
+        # The actual bug this session fixes: map state (and events, and
+        # location) used to be one global slot any visitor's poll would
+        # read — a fresh page load, or another caller's stale tab, could
+        # see someone else's trip. See store.py's module docstring. Uses a
+        # synthetic result (not a live next_arrivals call) for the same
+        # reason test_bus_plus_rail_trip_has_real_polylines does — this
+        # isn't testing live-ETA behaviour, just the call_id gate.
+        call_id = store.start_call()
+        mapstate.set_from_next_arrivals({"ok": True, "stop": "KL Sentral", "arrivals": [{"route": "T789", "eta_seconds": 180, "eta_human": "3 minutes", "category": "rapid-bus-kl"}]})
+
+        self.assertEqual(mapstate.get(call_id)["kind"], "stop")
+        self.assertEqual(mapstate.get("some-other-call-id"), {"kind": None, "options": []})
+        self.assertEqual(mapstate.get(None), {"kind": None, "options": []})
 
     def test_no_live_eta_still_draws_the_structural_route(self):
         # The exact failure shape plan_trip returns when a route genuinely
@@ -92,7 +111,7 @@ class MapStateTests(unittest.TestCase):
         }
         args = {"from_stop": "Fakulti Sains Komputer", "to_stop": "Pasar Seni (Platform B5)"}
         mapstate.set_from_plan_trip(result, args)
-        state = mapstate.get()
+        state = mapstate.get(store.active_call_id())
 
         self.assertEqual(state["kind"], "trip")
         self.assertTrue(state["options"], state)

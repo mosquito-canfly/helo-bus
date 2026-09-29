@@ -1943,12 +1943,27 @@ WALK_SPEED_MPS = 1.4  # ~5 km/h; straight-line distance, not a footpath route
 # ponytail: single global slot, same as the rest of this demo's in-memory
 # state (one event log, one alert list) — fine for one caller at a time,
 # would need a per-session key if this ever serves concurrent callers.
+# Tagged with the call_id it was shared under (see store.py's module
+# docstring for the whole per-call scoping scheme) purely so a stale
+# browser tab's location can't leak into a later call at read time
+# (/api/map-state) — find_nearby_stops itself (an AssemblyAI tool call,
+# which never carries a call_id) always just uses whatever's current.
 _last_location: tuple[float, float] | None = None
+_last_location_call_id: str | None = None
 
 
-def set_location(lat: float, lon: float) -> None:
-    global _last_location
+def set_location(lat: float, lon: float, call_id: str | None) -> None:
+    global _last_location, _last_location_call_id
     _last_location = (lat, lon)
+    _last_location_call_id = call_id
+
+
+def reset_location() -> None:
+    """Called when a new call starts (see store.start_call) — a caller's
+    shared location must not outlive their own call."""
+    global _last_location, _last_location_call_id
+    _last_location = None
+    _last_location_call_id = None
 
 
 def find_nearby_stops(limit: int = 3) -> dict:

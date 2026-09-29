@@ -21,9 +21,22 @@ from __future__ import annotations
 
 import json
 
-from . import gtfs
+from . import gtfs, store
 
+# Stamped with whichever call was active (store.active_call_id()) at the
+# moment a tool call last updated this — see store.py's module docstring for
+# the whole per-call scoping scheme and its limits. get() only ever hands
+# back _state to the call_id it actually belongs to.
 _state: dict | None = None
+_state_call_id: str | None = None
+
+
+def reset() -> None:
+    """Called when a new call starts (see store.start_call) so a fresh page
+    load's map never shows the previous caller's trip."""
+    global _state, _state_call_id
+    _state = None
+    _state_call_id = None
 
 # plan_trip reasons that mean "a real route exists, live data just didn't
 # have an ETA for it" — worth drawing on the map anyway. Anything else
@@ -187,7 +200,7 @@ def _tuple_to_step(t: tuple) -> dict:
 
 
 def set_from_next_arrivals(result: dict) -> None:
-    global _state
+    global _state, _state_call_id
     if not (result.get("ok") and result.get("stop")):
         return
     point = _bus_point(result["stop"])
@@ -196,10 +209,11 @@ def set_from_next_arrivals(result: dict) -> None:
     route_ids = {gtfs._short_name_to_route_id[a["route"]] for a in result.get("arrivals", []) if a["route"] in gtfs._short_name_to_route_id}
     option = {"stops": [{"name": result["stop"], "role": "stop", **point}], "legs": [], "vehicles": _route_vehicles(route_ids)}
     _state = {"kind": "stop", "options": [option]}
+    _state_call_id = store.active_call_id()
 
 
 def set_from_plan_trip(result: dict, args: dict | None = None) -> None:
-    global _state
+    global _state, _state_call_id
     options: list[dict] = []
 
     if result.get("ok") and result.get("options"):
@@ -219,6 +233,7 @@ def set_from_plan_trip(result: dict, args: dict | None = None) -> None:
     if not options:
         return
     _state = {"kind": "trip", "options": options}
+    _state_call_id = store.active_call_id()
 
 
 def update(path: str, request_body: bytes, response_body: bytes) -> None:
@@ -237,5 +252,7 @@ def update(path: str, request_body: bytes, response_body: bytes) -> None:
         pass
 
 
-def get() -> dict:
+def get(call_id: str | None) -> dict:
+    if call_id != _state_call_id:
+        return {"kind": None, "options": []}
     return _state or {"kind": None, "options": []}

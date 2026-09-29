@@ -74,6 +74,13 @@ let live = false;
 let currentAgentId = "";
 let pendingPromptHint = null;
 
+// Minted fresh by /api/call/start every time Start call is pressed, then
+// carried on every /api/location, /api/map-state and /api/events request —
+// see app/store.py's module docstring for why the server needs this (its
+// tool calls, run by AssemblyAI, never carry an id of their own) and what
+// it doesn't cover (two truly simultaneous callers).
+let currentCallId = null;
+
 // Playback scheduling. Holding the sources lets barge-in cut the agent off.
 let playHead = 0;
 let scheduled = [];
@@ -483,7 +490,7 @@ function renderCall(event) {
 
 async function pollEvents() {
   try {
-    const res = await fetch(`/api/events?since=${eventCursor}`);
+    const res = await fetch(`/api/events?since=${eventCursor}&call_id=${encodeURIComponent(currentCallId || "")}`);
     const data = await res.json();
     eventCursor = data.cursor;
     for (const event of data.events) {
@@ -570,7 +577,7 @@ function shareLocation(onDone) {
       fetch("/api/location", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude, call_id: currentCallId }),
       })
         .then(() => onDone && onDone(true))
         .catch(() => onDone && onDone(false));
@@ -604,6 +611,28 @@ async function start() {
   // line), so there's no window where both are visible together.
   document.body.classList.add("call-started");
   clearEmpty(els.transcript);
+
+  // A fresh call_id before touching anything scoped to it (map-state,
+  // events, location) — see currentCallId's own comment. Reset whatever
+  // the previous call left behind so the panel opens onto this call's own
+  // (empty, until a tool call fills it) state, never a leftover one.
+  try {
+    const data = await fetch("/api/call/start", { method: "POST" }).then((r) => r.json());
+    currentCallId = data.call_id;
+  } catch (_) {
+    currentCallId = null;
+  }
+  eventCursor = 0;
+  pending = [];
+  lastLiveEvent = null;
+  lastMapState = null;
+  if (map) for (const layer of mapLayers) map.removeLayer(layer);
+  mapLayers = [];
+
+  setToolsOpen(true);
+  if (!mapPollTimer) mapPollTimer = setInterval(pollMapState, MAP_POLL_MS);
+  pollMapState();
+  renderTripPanel();
 
   shareLocation(); // ask now, while the call-start click still counts as a user gesture
   resetTimer(); // clear the previous call's duration
@@ -740,6 +769,8 @@ function cleanup() {
 
   clearInterval(pollTimer);
   pollTimer = null;
+  clearInterval(mapPollTimer);
+  mapPollTimer = null;
   stopPlayback();
 
   if (micStream) micStream.getTracks().forEach((t) => t.stop());
@@ -757,6 +788,7 @@ function cleanup() {
   els.talk.classList.remove("ending");
   setStatus("Idle", "idle");
   pollEvents(); // catch anything that landed as the call closed
+  pollMapState();
 }
 
 els.talk.addEventListener("click", () => (live ? stop() : start()));
@@ -791,7 +823,7 @@ function setToolsOpen(open) {
 
 toolsToggle.addEventListener("click", () => setToolsOpen(!document.body.classList.contains("tools-open")));
 toolsBackdrop.addEventListener("click", () => setToolsOpen(false)); // tap-outside-to-close, mobile sheet only
-setToolsOpen(window.innerWidth > 880); // open by default on desktop, closed on mobile
+// Stays closed until start() opens it — nothing to show before a call exists.
 
 // --------------------------------------------------------------- live map
 //
@@ -908,16 +940,19 @@ function renderMap(state) {
 
 async function pollMapState() {
   try {
-    const state = await fetch("/api/map-state").then((r) => r.json());
+    const state = await fetch(`/api/map-state?call_id=${encodeURIComponent(currentCallId || "")}`).then((r) => r.json());
     renderMap(state);
   } catch (_) {
     /* transient; the next tick retries */
   }
 }
 
+// Polling (and the panel itself) only starts once a call begins — see
+// start(). Before that there's nothing to show and nothing scoped to poll
+// for yet (see currentCallId).
+let mapPollTimer = null;
+
 initMap();
-pollMapState();
-setInterval(pollMapState, MAP_POLL_MS);
 
 // The right panel's compact "current trip" summary — reuses the same
 // step-row markup as the old inline card, driven by the richer result

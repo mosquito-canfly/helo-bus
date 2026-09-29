@@ -79,6 +79,7 @@ class SetAlertRequest(BaseModel):
 class LocationRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
+    call_id: str | None = Field(default=None, description="From /api/call/start; tags this location to one call")
 
 
 @app.get("/health")
@@ -122,17 +123,30 @@ def api_location(req: LocationRequest) -> dict:
     """The browser posts geolocation here (with the caller's permission) so
     find_nearby_stops has something to search from — the agent itself never
     receives raw coordinates, only stop names and walking distances."""
-    gtfs.set_location(req.lat, req.lon)
+    gtfs.set_location(req.lat, req.lon, req.call_id)
     return {"ok": True}
+
+
+@app.post("/api/call/start")
+def api_call_start() -> dict:
+    """The browser calls this once per Start-call press, before anything
+    else, and tags every following /api/location, /api/map-state and
+    /api/events call with the id it gets back — see store.py's module
+    docstring for why this (and not something AssemblyAI's tool calls
+    themselves carry) is what scopes a call's own data to itself."""
+    call_id = store.start_call()
+    mapstate.reset()
+    gtfs.reset_location()
+    return {"call_id": call_id}
 
 
 # --- demo endpoints -------------------------------------------------------
 
 
 @app.get("/api/events")
-def api_events(since: int = 0) -> dict:
+def api_events(since: int = 0, call_id: str | None = None) -> dict:
     gtfs.ensure_fresh()  # also checks alert thresholds; gated to once/30s internally
-    events = store.events_since(since)
+    events = store.events_since(since, call_id)
     return {"events": events, "cursor": events[-1]["seq"] if events else since}
 
 
@@ -208,14 +222,17 @@ def api_debug_stop(name: str) -> dict:
 
 
 @app.get("/api/map-state")
-def api_map_state() -> dict:
+def api_map_state(call_id: str | None = None) -> dict:
     """Geometry for the live map: the latest next_arrivals/plan_trip answer
     (mapstate.py, updated from the tool-call middleware above) plus the
-    caller's last-shared location, if any. No GTFS shapes held in memory —
-    legs are stop-to-stop polylines built from coordinates already loaded
-    for the ETA engine; see app/mapstate.py."""
-    state = mapstate.get()
-    state["location"] = {"lat": gtfs._last_location[0], "lon": gtfs._last_location[1]} if gtfs._last_location else None
+    caller's last-shared location, if any — both scoped to call_id (from
+    /api/call/start) so a fresh page load or a stale tab never gets handed
+    another call's trip. No GTFS shapes held in memory — legs are
+    stop-to-stop polylines built from coordinates already loaded for the
+    ETA engine; see app/mapstate.py."""
+    state = mapstate.get(call_id)
+    has_location = gtfs._last_location and gtfs._last_location_call_id == call_id
+    state["location"] = {"lat": gtfs._last_location[0], "lon": gtfs._last_location[1]} if has_location else None
     return state
 
 
